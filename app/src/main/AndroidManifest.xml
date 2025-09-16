@@ -2,13 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.podovs">
 
-    <!-- Permisos de Health Connect (solo lectura de pasos por ahora) -->
-    <uses-permission android:name="android.permission.health.READ_STEPS"/>
+    <!-- Único permiso necesario para pasos -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
 
-    <!-- Para chequear/abrir Health Connect (Android 13 e inferiores) -->
-    <queries>
-        <package android:name="com.google.android.apps.healthdata"/>
-    </queries>
+    <!-- Declaramos features como opcionales -->
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false"/>
 
     <application
         android:allowBackup="true"
@@ -20,7 +19,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PodoVS">
 
-        <!-- Login primero (launcher) -->
+        <!-- Login primero -->
         <activity
             android:name=".LoginActivity"
             android:exported="true">
@@ -30,10 +29,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Main se abre luego del login -->
+        <!-- Main luego del login -->
         <activity
             android:name=".MainActivity"
             android:exported="false"/>
     </application>
-
 </manifest>
