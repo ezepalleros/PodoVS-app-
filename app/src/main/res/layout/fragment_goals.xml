@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootOverlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#80000000"
+    android:padding="20dp">
+
+    <!-- Ventana modal centrada -->
+<androidx.cardview.widget.CardView
+android:id="@+id/cardModal"
+android:layout_width="match_parent"
+android:layout_height="wrap_content"
+android:layout_gravity="center"
+app:cardBackgroundColor="#2B2B2F"
+app:cardCornerRadius="18dp"
+app:cardElevation="8dp">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Metas"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_menu_close_clear_cancel" />
+    </LinearLayout>
+
+    <!-- Contenido scrolleable por si crece -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls">
+
+        <LinearLayout
+            android:id="@+id/contentLinear"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:divider="?android:attr/dividerVertical"
+            android:showDividers="middle">
+
+            <!-- Card Meta Diaria -->
+            <LinearLayout
+                android:id="@+id/cardDaily"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#32333A"
+                android:padding="16dp"
+                android:clipToOutline="true">
+
+                <TextView
+                    android:id="@+id/tvDailyTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:text="Meta diaria"/>
+
+                <TextView
+                    android:id="@+id/tvDailyMeta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#C7CAD1"
+                    android:text="Meta diaria: 0 pasos"/>
+
+                <ProgressBar
+                    android:id="@+id/pbDaily"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="10dp"
+                    android:layout_marginTop="10dp"
+                    android:progress="0"
+                    android:max="100"
+                    android:progressTint="#6FE6B7"
+                    android:background="#14000000"/>
+
+                <TextView
+                    android:id="@+id/tvDailyProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:text="0 / 0"/>
+
+                <TextView
+                    android:id="@+id/tvDailyCoins"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#C7CAD1"
+                    android:text="Recompensa posible: 0"/>
+
+                <TextView
+                    android:id="@+id/tvDailyState"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#6FE6B7"
+                    android:text="Disponible" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDailyClaim"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Reclamar diaria"/>
+            </LinearLayout>
+
+            <!-- Card Meta Semanal -->
+            <LinearLayout
+                android:id="@+id/cardWeekly"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#32333A"
+                android:padding="16dp"
+                android:clipToOutline="true">
+
+                <TextView
+                    android:id="@+id/tvWeeklyTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:text="Meta semanal"/>
+
+                <TextView
+                    android:id="@+id/tvWeeklyMeta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#C7CAD1"
+                    android:text="Meta semanal: 0 pasos"/>
+
+                <ProgressBar
+                    android:id="@+id/pbWeekly"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="10dp"
+                    android:layout_marginTop="10dp"
+                    android:progress="0"
+                    android:max="100"
+                    android:progressTint="#FF9E3D"
+                    android:background="#14000000"/>
+
+                <TextView
+                    android:id="@+id/tvWeeklyProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:text="0 / 0"/>
+
+                <TextView
+                    android:id="@+id/tvWeeklyCoins"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#C7CAD1"
+                    android:text="Recompensa posible: 0"/>
+
+                <TextView
+                    android:id="@+id/tvWeeklyState"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#6FE6B7"
+                    android:text="Disponible" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnWeeklyClaim"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Reclamar semanal"/>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>
+</androidx.cardview.widget.CardView>
+</FrameLayout>

@@ -9,49 +9,66 @@ import android.database.Cursor;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "podovs.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 4; // ⬅️ nueva versión
+
     // ------- Usuarios -------
-    public static final String TABLE_USUARIOS = "usuarios";
-    public static final String COL_ID = "id";
-    public static final String COL_NOMBRE = "nombre";
-    public static final String COL_EMAIL = "email";
-    public static final String COL_PASSWORD = "password";
-    public static final String COL_KM_HOY = "km_hoy";
-    public static final String COL_KM_SEMANA = "km_semana";
-    public static final String COL_SALDO = "saldo"; // monedas del usuario (INTEGER)
+    public static final String TABLE_USUARIOS   = "usuarios";
+    public static final String COL_ID           = "id";
+    public static final String COL_NOMBRE       = "nombre";
+    public static final String COL_EMAIL        = "email";
+    public static final String COL_PASSWORD     = "password";
+    public static final String COL_SALDO        = "saldo";
+    public static final String COL_NIVEL        = "nivel";        // NEW
+    public static final String COL_DIFICULTAD   = "dificultad";   // NEW: bajo/medio/alto
+    public static final String COL_STATS_FK     = "stats_id";     // NEW: FK → estadisticas.id
+
+    // ------- Estadísticas (NEW) -------
+    public static final String TABLE_STATS          = "estadisticas";
+    public static final String COL_ST_ID            = "id";
+    public static final String COL_ST_KM_HOY        = "km_hoy";
+    public static final String COL_ST_KM_SEMANA     = "km_semana";
+    public static final String COL_ST_PASOS_TOTALES = "pasos_totales";
+    public static final String COL_ST_META_DIARIA   = "meta_diaria_pasos";
+    public static final String COL_ST_META_SEMANAL  = "meta_semanal_pasos";
+    public static final String COL_ST_XP            = "xp";          // progreso dentro del nivel actual
 
     // ------- Cosméticos -------
-    public static final String TABLE_COSMETICOS = "cosmeticos";
-    public static final String COL_COSM_ID = "id";
-    public static final String COL_COSM_NOMBRE = "nombre";
-    public static final String COL_COSM_TIPO = "tipo"; // cabeza/remera/pantalon/zapatillas/piel
-    public static final String COL_COSM_PRECIO = "precio"; // INTEGER
-    public static final String COL_COSM_ASSET = "asset"; // opcional (clave/archivo)
+    public static final String TABLE_COSMETICOS  = "cosmeticos";
+    public static final String COL_COSM_ID       = "id";
+    public static final String COL_COSM_NOMBRE   = "nombre";
+    public static final String COL_COSM_TIPO     = "tipo";
+    public static final String COL_COSM_PRECIO   = "precio";
+    public static final String COL_COSM_ASSET    = "asset";
 
-    // Tipos permitidos
-    public static final String TIPO_CABEZA = "cabeza";
-    public static final String TIPO_REMERA = "remera";
-    public static final String TIPO_PANTALON = "pantalon";
-    public static final String TIPO_ZAPATILLAS = "zapatillas";
-    public static final String TIPO_PIEL = "piel";
+    public static final String TIPO_CABEZA      = "cabeza";
+    public static final String TIPO_REMERA      = "remera";
+    public static final String TIPO_PANTALON    = "pantalon";
+    public static final String TIPO_ZAPATILLAS  = "zapatillas";
+    public static final String TIPO_PIEL        = "piel";
 
-    // ------- Inventario del usuario -------
-    public static final String TABLE_INV = "usuario_inventario";
-    public static final String COL_INV_USER_ID = "user_id";
-    public static final String COL_INV_COSM_ID = "cosmetico_id";
-    public static final String COL_INV_ADQUIRIDO_AT = "adquirido_at";
+    // ------- Inventario / Equipado -------
+    public static final String TABLE_INV              = "usuario_inventario";
+    public static final String COL_INV_USER_ID        = "user_id";
+    public static final String COL_INV_COSM_ID        = "cosmetico_id";
+    public static final String COL_INV_ADQUIRIDO_AT   = "adquirido_at";
 
-    // ------- Equipado (uno por tipo) -------
-    public static final String TABLE_EQUIP = "usuario_equipado";
-    public static final String COL_EQ_USER_ID = "user_id";
-    public static final String COL_EQ_TIPO = "tipo";
-    public static final String COL_EQ_COSM_ID = "cosmetico_id";
+    public static final String TABLE_EQUIP            = "usuario_equipado";
+    public static final String COL_EQ_USER_ID         = "user_id";
+    public static final String COL_EQ_TIPO            = "tipo";
+    public static final String COL_EQ_COSM_ID         = "cosmetico_id";
 
     // Códigos de compra
-    public static final int BUY_OK = 0;
-    public static final int BUY_ALREADY_OWNED = 1;
-    public static final int BUY_NO_FUNDS = 2;
-    public static final int BUY_INVALID_ITEM = 3;
+    public static final int BUY_OK              = 0;
+    public static final int BUY_ALREADY_OWNED   = 1;
+    public static final int BUY_NO_FUNDS        = 2;
+    public static final int BUY_INVALID_ITEM    = 3;
+
+    // Metas / XP
+    private static final int BASE_DIARIA   = 1000;
+    private static final int BASE_SEMANAL  = 10000;
+    private static final int XP_PER_LEVEL  = 100;
+    private static final int XP_DAILY      = 10;
+    private static final int XP_WEEKLY     = 70;
 
     public DatabaseHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
@@ -59,140 +76,219 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        // Usuarios (con saldo)
-        String createUsuarios = "CREATE TABLE " + TABLE_USUARIOS + " (" +
-                COL_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                COL_NOMBRE + " TEXT NOT NULL, " +
-                COL_EMAIL + " TEXT UNIQUE NOT NULL, " +
-                COL_PASSWORD + " TEXT NOT NULL, " +
-                COL_KM_HOY + " DECIMAL(6,2) DEFAULT 0, " +
-                COL_KM_SEMANA + " DECIMAL(7,2) DEFAULT 0, " +
-                COL_SALDO + " INTEGER NOT NULL DEFAULT 0" +
-                ");";
-        db.execSQL(createUsuarios);
+        // 1) Estadísticas
+        db.execSQL("CREATE TABLE " + TABLE_STATS + " (" +
+                COL_ST_ID            + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                COL_ST_KM_HOY        + " DECIMAL(6,2) DEFAULT 0, " +
+                COL_ST_KM_SEMANA     + " DECIMAL(7,2) DEFAULT 0, " +
+                COL_ST_PASOS_TOTALES + " INTEGER       DEFAULT 0, " +
+                COL_ST_META_DIARIA   + " INTEGER       DEFAULT " + BASE_DIARIA + ", " +
+                COL_ST_META_SEMANAL  + " INTEGER       DEFAULT " + BASE_SEMANAL + ", " +
+                COL_ST_XP            + " INTEGER       DEFAULT 0" +
+                ");");
 
-        // Cosméticos
-        String createCosmeticos = "CREATE TABLE " + TABLE_COSMETICOS + " (" +
+        // 2) Usuarios
+        db.execSQL("CREATE TABLE " + TABLE_USUARIOS + " (" +
+                COL_ID         + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                COL_NOMBRE     + " TEXT NOT NULL, " +
+                COL_EMAIL      + " TEXT UNIQUE NOT NULL, " +
+                COL_PASSWORD   + " TEXT NOT NULL, " +
+                COL_SALDO      + " INTEGER NOT NULL DEFAULT 0, " +
+                COL_NIVEL      + " INTEGER NOT NULL DEFAULT 1, " +
+                COL_DIFICULTAD + " TEXT NOT NULL DEFAULT 'medio' CHECK(" + COL_DIFICULTAD + " IN ('bajo','medio','alto')), " +
+                COL_STATS_FK   + " INTEGER, " +
+                "FOREIGN KEY(" + COL_STATS_FK + ") REFERENCES " + TABLE_STATS + "(" + COL_ST_ID + ") ON DELETE SET NULL" +
+                ");");
+
+        // 3) Cosméticos / Inventario / Equipado (sin cambios)
+        db.execSQL("CREATE TABLE " + TABLE_COSMETICOS + " (" +
                 COL_COSM_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
                 COL_COSM_NOMBRE + " TEXT NOT NULL, " +
                 COL_COSM_TIPO + " TEXT NOT NULL CHECK(" + COL_COSM_TIPO +
                 " IN ('" + TIPO_CABEZA + "','" + TIPO_REMERA + "','" + TIPO_PANTALON + "','" + TIPO_ZAPATILLAS + "','" + TIPO_PIEL + "')), " +
                 COL_COSM_PRECIO + " INTEGER NOT NULL DEFAULT 0, " +
                 COL_COSM_ASSET + " TEXT" +
-                ");";
-        db.execSQL(createCosmeticos);
+                ");");
 
-        // Inventario (posesiones)
-        String createInventario = "CREATE TABLE " + TABLE_INV + " (" +
+        db.execSQL("CREATE TABLE " + TABLE_INV + " (" +
                 COL_INV_USER_ID + " INTEGER NOT NULL, " +
                 COL_INV_COSM_ID + " INTEGER NOT NULL, " +
                 COL_INV_ADQUIRIDO_AT + " TEXT DEFAULT (datetime('now')), " +
                 "PRIMARY KEY (" + COL_INV_USER_ID + ", " + COL_INV_COSM_ID + "), " +
                 "FOREIGN KEY (" + COL_INV_USER_ID + ") REFERENCES " + TABLE_USUARIOS + "(" + COL_ID + ") ON DELETE CASCADE, " +
                 "FOREIGN KEY (" + COL_INV_COSM_ID + ") REFERENCES " + TABLE_COSMETICOS + "(" + COL_COSM_ID + ") ON DELETE CASCADE" +
-                ");";
-        db.execSQL(createInventario);
+                ");");
 
-        // Equipado actual
-        String createEquipado = "CREATE TABLE " + TABLE_EQUIP + " (" +
+        db.execSQL("CREATE TABLE " + TABLE_EQUIP + " (" +
                 COL_EQ_USER_ID + " INTEGER NOT NULL, " +
                 COL_EQ_TIPO + " TEXT NOT NULL, " +
                 COL_EQ_COSM_ID + " INTEGER NOT NULL, " +
                 "PRIMARY KEY (" + COL_EQ_USER_ID + ", " + COL_EQ_TIPO + "), " +
                 "FOREIGN KEY (" + COL_EQ_USER_ID + ") REFERENCES " + TABLE_USUARIOS + "(" + COL_ID + ") ON DELETE CASCADE, " +
                 "FOREIGN KEY (" + COL_EQ_COSM_ID + ") REFERENCES " + TABLE_COSMETICOS + "(" + COL_COSM_ID + ") ON DELETE CASCADE" +
-                ");";
-        db.execSQL(createEquipado);
+                ");");
 
-        // Seed inicial
-        seedUsuarios(db);
+        seedUsuariosYStats(db);
         seedCosmeticos(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // v2: añadimos tablas de cosméticos/inventario/equipado
-        if (oldVersion < 2) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_COSMETICOS + " (" +
-                    COL_COSM_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    COL_COSM_NOMBRE + " TEXT NOT NULL, " +
-                    COL_COSM_TIPO + " TEXT NOT NULL CHECK(" + COL_COSM_TIPO +
-                    " IN ('" + TIPO_CABEZA + "','" + TIPO_REMERA + "','" + TIPO_PANTALON + "','" + TIPO_ZAPATILLAS + "','" + TIPO_PIEL + "')), " +
-                    COL_COSM_PRECIO + " INTEGER NOT NULL DEFAULT 0, " +
-                    COL_COSM_ASSET + " TEXT" +
-                    ");");
-
-            db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_INV + " (" +
-                    COL_INV_USER_ID + " INTEGER NOT NULL, " +
-                    COL_INV_COSM_ID + " INTEGER NOT NULL, " +
-                    COL_INV_ADQUIRIDO_AT + " TEXT DEFAULT (datetime('now')), " +
-                    "PRIMARY KEY (" + COL_INV_USER_ID + ", " + COL_INV_COSM_ID + "), " +
-                    "FOREIGN KEY (" + COL_INV_USER_ID + ") REFERENCES " + TABLE_USUARIOS + "(" + COL_ID + ") ON DELETE CASCADE, " +
-                    "FOREIGN KEY (" + COL_INV_COSM_ID + ") REFERENCES " + TABLE_COSMETICOS + "(" + COL_COSM_ID + ") ON DELETE CASCADE" +
-                    ");");
-
-            db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_EQUIP + " (" +
-                    COL_EQ_USER_ID + " INTEGER NOT NULL, " +
-                    COL_EQ_TIPO + " TEXT NOT NULL, " +
-                    COL_EQ_COSM_ID + " INTEGER NOT NULL, " +
-                    "PRIMARY KEY (" + COL_EQ_USER_ID + ", " + COL_EQ_TIPO + "), " +
-                    "FOREIGN KEY (" + COL_EQ_USER_ID + ") REFERENCES " + TABLE_USUARIOS + "(" + COL_ID + ") ON DELETE CASCADE, " +
-                    "FOREIGN KEY (" + COL_EQ_COSM_ID + ") REFERENCES " + TABLE_COSMETICOS + "(" + COL_COSM_ID + ") ON DELETE CASCADE" +
-                    ");");
-
-            seedCosmeticos(db);
-        }
-        // v3: añadimos columna saldo si no existe
+        // v2 ya la tenías (cosméticos/inventario/equipado)
         if (oldVersion < 3) {
-            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_SALDO + " INTEGER NOT NULL DEFAULT 0");
+            // Asegurar columna saldo si no existiera (por compatibilidad)
+            try { db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_SALDO + " INTEGER NOT NULL DEFAULT 0"); } catch (Exception ignored) {}
+        }
+        if (oldVersion < 4) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_STATS + " (" +
+                    COL_ST_ID            + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    COL_ST_KM_HOY        + " DECIMAL(6,2) DEFAULT 0, " +
+                    COL_ST_KM_SEMANA     + " DECIMAL(7,2) DEFAULT 0, " +
+                    COL_ST_PASOS_TOTALES + " INTEGER       DEFAULT 0, " +
+                    COL_ST_META_DIARIA   + " INTEGER       DEFAULT " + BASE_DIARIA + ", " +
+                    COL_ST_META_SEMANAL  + " INTEGER       DEFAULT " + BASE_SEMANAL + ", " +
+                    COL_ST_XP            + " INTEGER       DEFAULT 0" +
+                    ");");
+
+            try { db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_NIVEL + " INTEGER NOT NULL DEFAULT 1"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_DIFICULTAD + " TEXT NOT NULL DEFAULT 'medio'"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_STATS_FK + " INTEGER"); } catch (Exception ignored) {}
+
+            // Migrar posibles km_hoy/km_semana antiguos si existían en usuarios (los copiamos a stats)
+            Cursor cur = db.rawQuery("SELECT " + COL_ID + ", " +
+                    "COALESCE((SELECT 0),0) AS dummy " + // placeholder por si no estaban las columnas antiguas
+                    " FROM " + TABLE_USUARIOS, null);
+            try {
+                if (cur.moveToFirst()) {
+                    do {
+                        long uid = cur.getLong(0);
+                        // Valores antiguos si existían
+                        double kmHoy = 0, kmSem = 0;
+                        try {
+                            Cursor c2 = db.rawQuery("PRAGMA table_info(" + TABLE_USUARIOS + ")", null);
+                            boolean hasKmHoy = false, hasKmSem = false;
+                            while (c2.moveToNext()) {
+                                String name = c2.getString(1);
+                                if ("km_hoy".equals(name)) hasKmHoy = true;
+                                if ("km_semana".equals(name)) hasKmSem = true;
+                            }
+                            c2.close();
+                            if (hasKmHoy || hasKmSem) {
+                                Cursor c3 = db.rawQuery("SELECT " +
+                                                (hasKmHoy ? "km_hoy" : "0") + ", " +
+                                                (hasKmSem ? "km_semana" : "0") +
+                                                " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=?",
+                                        new String[]{String.valueOf(uid)});
+                                if (c3.moveToFirst()) {
+                                    kmHoy = c3.getDouble(0);
+                                    kmSem = c3.getDouble(1);
+                                }
+                                c3.close();
+                            }
+                        } catch (Exception ignored) {}
+
+                        // dificultad y nivel actuales
+                        String dif = "medio";
+                        int nivel = 1;
+                        Cursor c4 = db.rawQuery("SELECT " + COL_DIFICULTAD + ", " + COL_NIVEL +
+                                        " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=?",
+                                new String[]{String.valueOf(uid)});
+                        if (c4.moveToFirst()) {
+                            int idxD = c4.getColumnIndex(COL_DIFICULTAD);
+                            int idxN = c4.getColumnIndex(COL_NIVEL);
+                            if (idxD >= 0) dif = c4.getString(idxD);
+                            if (idxN >= 0) nivel = c4.getInt(idxN);
+                        }
+                        c4.close();
+
+                        int metaD = targetFor(nivel, dif, BASE_DIARIA);
+                        int metaS = targetFor(nivel, dif, BASE_SEMANAL);
+
+                        ContentValues st = new ContentValues();
+                        st.put(COL_ST_KM_HOY, kmHoy);
+                        st.put(COL_ST_KM_SEMANA, kmSem);
+                        st.put(COL_ST_PASOS_TOTALES, 0);
+                        st.put(COL_ST_META_DIARIA, metaD);
+                        st.put(COL_ST_META_SEMANAL, metaS);
+                        st.put(COL_ST_XP, 0);
+                        long statsId = db.insert(TABLE_STATS, null, st);
+
+                        ContentValues up = new ContentValues();
+                        up.put(COL_STATS_FK, statsId);
+                        db.update(TABLE_USUARIOS, up, COL_ID + "=?", new String[]{String.valueOf(uid)});
+                    } while (cur.moveToNext());
+                }
+            } finally {
+                cur.close();
+            }
         }
     }
 
-    // ========= Seed =========
-    private void seedUsuarios(SQLiteDatabase db) {
-        insertarUsuario(db,"Martín Blanco", "martin.blanco@example.com", "1234", 2.50, 12.70, 500);
-        insertarUsuario(db,"Julieta Torres", "julieta.torres@example.com", "abcd", 4.10, 20.30, 450);
-        insertarUsuario(db,"Rodolfo Cervantes", "rodolfo.cervantes@example.com", "1111", 0.80, 5.00, 300);
-        insertarUsuario(db,"Lucía Fernández", "lucia.fernandez@example.com", "pass123", 6.00, 25.90, 700);
-        insertarUsuario(db,"Ezequiel Palleros", "ezequiel.palleros@example.com", "test", 3.30, 15.20, 1000);
+    // ====== Seeds ======
+    private void seedUsuariosYStats(SQLiteDatabase db) {
+        // cinco usuarios con dificultad "medio"
+        long u1 = insertarUsuario(db,"Martín Blanco", "martin.blanco@example.com", "1234", 500, "medio");
+        long u2 = insertarUsuario(db,"Julieta Torres", "julieta.torres@example.com", "abcd", 450, "medio");
+        long u3 = insertarUsuario(db,"Rodolfo Cervantes", "rodolfo.cervantes@example.com", "1111", 300, "medio");
+        long u4 = insertarUsuario(db,"Lucía Fernández", "lucia.fernandez@example.com", "pass123", 700, "medio");
+        long u5 = insertarUsuario(db,"Ezequiel Palleros", "ezequiel.palleros@example.com", "test", 1000,"medio");
+
+        // km iniciales de ejemplo
+        setKmHoy(u1, 2.50); setKmSemana(u1, 12.70);
+        setKmHoy(u2, 4.10); setKmSemana(u2, 20.30);
+        setKmHoy(u3, 0.80); setKmSemana(u3, 5.00);
+        setKmHoy(u4, 6.00); setKmSemana(u4, 25.90);
+        setKmHoy(u5, 3.30); setKmSemana(u5, 15.20);
     }
 
     private void seedCosmeticos(SQLiteDatabase db) {
-        if (countRows(db, TABLE_COSMETICOS) > 0) return;
-        insertarCosmetico(db, "Gorra azul", TIPO_CABEZA, 100, "head_cap_blue");
-        insertarCosmetico(db, "Vincha roja", TIPO_CABEZA, 80, "head_band_red");
-        insertarCosmetico(db, "Remera básica", TIPO_REMERA, 60, "shirt_basic");
-        insertarCosmetico(db, "Pantalón negro", TIPO_PANTALON, 120, "pants_black");
-        insertarCosmetico(db, "Zapas blancas", TIPO_ZAPATILLAS, 150, "shoes_white");
-        insertarCosmetico(db, "Piel morena", TIPO_PIEL, 0, "skin_brown");
+        insertarCosmetico(db, "Gorra azul",     TIPO_CABEZA,     100, "head_cap_blue");
+        insertarCosmetico(db, "Vincha roja",    TIPO_CABEZA,      80, "head_band_red");
+        insertarCosmetico(db, "Remera básica",  TIPO_REMERA,      60, "shirt_basic");
+        insertarCosmetico(db, "Pantalón negro", TIPO_PANTALON,   120, "pants_black");
+        insertarCosmetico(db, "Zapas blancas",  TIPO_ZAPATILLAS, 150, "shoes_white");
+        insertarCosmetico(db, "Piel morena",    TIPO_PIEL,         0, "skin_brown");
     }
 
-    private int countRows(SQLiteDatabase db, String table) {
-        Cursor c = db.rawQuery("SELECT COUNT(*) FROM " + table, null);
-        try { return (c.moveToFirst() ? c.getInt(0) : 0); }
-        finally { c.close(); }
+    // ====== Helpers de creación usuario + stats ======
+    // Crea usuario nivel 1 con dificultad dada y su fila de stats (metas según dificultad)
+    private long insertarUsuario(SQLiteDatabase db, String nombre, String email, String password, long saldoInicial, String dificultad) {
+        int nivel = 1;
+        int metaD = targetFor(nivel, dificultad, BASE_DIARIA);
+        int metaS = targetFor(nivel, dificultad, BASE_SEMANAL);
+
+        ContentValues st = new ContentValues();
+        st.put(COL_ST_KM_HOY, 0);
+        st.put(COL_ST_KM_SEMANA, 0);
+        st.put(COL_ST_PASOS_TOTALES, 0);
+        st.put(COL_ST_META_DIARIA, metaD);
+        st.put(COL_ST_META_SEMANAL, metaS);
+        st.put(COL_ST_XP, 0);
+        long statsId = db.insert(TABLE_STATS, null, st);
+
+        ContentValues u = new ContentValues();
+        u.put(COL_NOMBRE, nombre);
+        u.put(COL_EMAIL, email);
+        u.put(COL_PASSWORD, password);
+        u.put(COL_SALDO, saldoInicial);
+        u.put(COL_NIVEL, nivel);
+        u.put(COL_DIFICULTAD, dificultad);
+        u.put(COL_STATS_FK, statsId);
+        return db.insert(TABLE_USUARIOS, null, u);
     }
 
-    // ========= CRUD Usuarios =========
-    // Compatibilidad con tu firma original
-    public long insertarUsuario(SQLiteDatabase db, String nombre, String email, String password,
-                                double kmHoy, double kmSemana) {
-        return insertarUsuario(db, nombre, email, password, kmHoy, kmSemana, 0);
+    private static double factor(String dificultad) {
+        if ("bajo".equalsIgnoreCase(dificultad)) return 1.1;
+        if ("alto".equalsIgnoreCase(dificultad)) return 1.3;
+        return 1.2; // medio (default)
+    }
+    private static int targetFor(int nivel, String dificultad, int base) {
+        double f = factor(dificultad);
+        double t = base * Math.pow(f, Math.max(0, nivel - 1));
+        return (int)Math.round(t);
     }
 
-    // Overload con saldo inicial
-    public long insertarUsuario(SQLiteDatabase db, String nombre, String email, String password,
-                                double kmHoy, double kmSemana, long saldoInicial) {
-        ContentValues cv = new ContentValues();
-        cv.put(COL_NOMBRE, nombre);
-        cv.put(COL_EMAIL, email);
-        cv.put(COL_PASSWORD, password);
-        cv.put(COL_KM_HOY, kmHoy);
-        cv.put(COL_KM_SEMANA, kmSemana);
-        cv.put(COL_SALDO, saldoInicial);
-        return db.insert(TABLE_USUARIOS, null, cv);
-    }
-
+    // ========= Lecturas simples =========
     public Cursor login(String email, String password) {
         SQLiteDatabase db = this.getReadableDatabase();
         return db.rawQuery("SELECT * FROM " + TABLE_USUARIOS +
@@ -202,26 +298,29 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public Cursor getRankingSemana() {
         SQLiteDatabase db = this.getReadableDatabase();
-        return db.rawQuery("SELECT * FROM " + TABLE_USUARIOS +
-                " ORDER BY " + COL_KM_SEMANA + " DESC", null);
+        String sql = "SELECT u." + COL_ID + ", u." + COL_NOMBRE + ", s." + COL_ST_KM_SEMANA +
+                " FROM " + TABLE_USUARIOS + " u " +
+                " JOIN " + TABLE_STATS + " s ON s." + COL_ST_ID + " = u." + COL_STATS_FK +
+                " ORDER BY s." + COL_ST_KM_SEMANA + " DESC";
+        return db.rawQuery(sql, null);
     }
-
     public Cursor getRankingHoy() {
         SQLiteDatabase db = this.getReadableDatabase();
-        return db.rawQuery("SELECT * FROM " + TABLE_USUARIOS +
-                " ORDER BY " + COL_KM_HOY + " DESC", null);
+        String sql = "SELECT u." + COL_ID + ", u." + COL_NOMBRE + ", s." + COL_ST_KM_HOY +
+                " FROM " + TABLE_USUARIOS + " u " +
+                " JOIN " + TABLE_STATS + " s ON s." + COL_ST_ID + " = u." + COL_STATS_FK +
+                " ORDER BY s." + COL_ST_KM_HOY + " DESC";
+        return db.rawQuery(sql, null);
     }
 
     // ========= SALDO =========
     public long getSaldo(long userId) {
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor c = db.rawQuery("SELECT " + COL_SALDO + " FROM " + TABLE_USUARIOS +
-                        " WHERE " + COL_ID + "=? LIMIT 1",
-                new String[]{String.valueOf(userId)});
+                " WHERE " + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
         try { return c.moveToFirst() ? c.getLong(0) : 0L; }
         finally { c.close(); }
     }
-
     public boolean setSaldo(long userId, long saldo) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues cv = new ContentValues();
@@ -229,7 +328,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         int rows = db.update(TABLE_USUARIOS, cv, COL_ID + "=?", new String[]{String.valueOf(userId)});
         return rows > 0;
     }
-
     public boolean addSaldo(long userId, long delta) {
         long actual = getSaldo(userId);
         long nuevo = actual + delta;
@@ -237,7 +335,135 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return setSaldo(userId, nuevo);
     }
 
-    // ========= CRUD Cosméticos / Inventario =========
+    // ========= KM / Pasos / Metas / XP =========
+    private long statsIdFor(long userId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS +
+                " WHERE " + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
+        try { return c.moveToFirst() ? c.getLong(0) : -1L; }
+        finally { c.close(); }
+    }
+
+    public double getKmHoy(long userId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT s." + COL_ST_KM_HOY +
+                " FROM " + TABLE_STATS + " s JOIN " + TABLE_USUARIOS + " u ON u." + COL_STATS_FK + "=s." + COL_ST_ID +
+                " WHERE u." + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
+        try { return c.moveToFirst() ? c.getDouble(0) : 0.0; }
+        finally { c.close(); }
+    }
+    public double getKmSemana(long userId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT s." + COL_ST_KM_SEMANA +
+                " FROM " + TABLE_STATS + " s JOIN " + TABLE_USUARIOS + " u ON u." + COL_STATS_FK + "=s." + COL_ST_ID +
+                " WHERE u." + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
+        try { return c.moveToFirst() ? c.getDouble(0) : 0.0; }
+        finally { c.close(); }
+    }
+
+    public void updateKmHoy(long userId, double kmHoy) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_KM_HOY + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{kmHoy, userId});
+    }
+    public void updateKmSemana(long userId, double kmSem) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_KM_SEMANA + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{kmSem, userId});
+    }
+
+    public void setKmHoy(long userId, double kmHoy) {
+        updateKmHoy(userId, kmHoy);
+    }
+
+    public void setKmSemana(long userId, double kmSemana) {
+        updateKmSemana(userId, kmSemana);
+    }
+
+    public int[] getMetas(long userId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT s." + COL_ST_META_DIARIA + ", s." + COL_ST_META_SEMANAL +
+                " FROM " + TABLE_STATS + " s JOIN " + TABLE_USUARIOS + " u ON u." + COL_STATS_FK + "=s." + COL_ST_ID +
+                " WHERE u." + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
+        try {
+            if (c.moveToFirst()) return new int[]{ c.getInt(0), c.getInt(1) };
+            return new int[]{ BASE_DIARIA, BASE_SEMANAL };
+        } finally { c.close(); }
+    }
+
+    public String getDificultad(long userId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT " + COL_DIFICULTAD + " FROM " + TABLE_USUARIOS +
+                " WHERE " + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
+        try { return c.moveToFirst() ? c.getString(0) : "medio"; }
+        finally { c.close(); }
+    }
+
+    public boolean setDificultad(long userId, String dificultad) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put(COL_DIFICULTAD, dificultad);
+        int rows = db.update(TABLE_USUARIOS, cv, COL_ID + "=?", new String[]{String.valueOf(userId)});
+        if (rows > 0) { recalcularMetas(userId); }
+        return rows > 0;
+    }
+
+    public int getNivel(long userId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT " + COL_NIVEL + " FROM " + TABLE_USUARIOS +
+                " WHERE " + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
+        try { return c.moveToFirst() ? c.getInt(0) : 1; }
+        finally { c.close(); }
+    }
+
+    public void recalcularMetas(long userId) {
+        int nivel = getNivel(userId);
+        String dif = getDificultad(userId);
+        int metaD = targetFor(nivel, dif, BASE_DIARIA);
+        int metaS = targetFor(nivel, dif, BASE_SEMANAL);
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_META_DIARIA + "=?, " + COL_ST_META_SEMANAL + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{metaD, metaS, userId});
+    }
+
+    // Subir XP y manejar level-up (100 xp por nivel). Devuelve nivel final.
+    public int addXpAndMaybeLevelUp(long userId, int deltaXp) {
+        SQLiteDatabase db = getWritableDatabase();
+        long statsId = statsIdFor(userId);
+        if (statsId <= 0) return getNivel(userId);
+
+        Cursor c = db.rawQuery("SELECT " + COL_ST_XP + " FROM " + TABLE_STATS + " WHERE " + COL_ST_ID + "=?",
+                new String[]{String.valueOf(statsId)});
+        int xp = 0;
+        if (c.moveToFirst()) xp = c.getInt(0);
+        c.close();
+
+        xp += deltaXp;
+        int nivel = getNivel(userId);
+        while (xp >= XP_PER_LEVEL) {
+            xp -= XP_PER_LEVEL;
+            nivel += 1;
+        }
+
+        ContentValues cvS = new ContentValues();
+        cvS.put(COL_ST_XP, xp);
+        db.update(TABLE_STATS, cvS, COL_ST_ID + "=?", new String[]{String.valueOf(statsId)});
+
+        ContentValues cvU = new ContentValues();
+        cvU.put(COL_NIVEL, nivel);
+        db.update(TABLE_USUARIOS, cvU, COL_ID + "=?", new String[]{String.valueOf(userId)});
+
+        recalcularMetas(userId);
+        return nivel;
+    }
+
+    public int onDailyGoalReached(long userId)  { return addXpAndMaybeLevelUp(userId, XP_DAILY); }
+    public int onWeeklyGoalReached(long userId) { return addXpAndMaybeLevelUp(userId, XP_WEEKLY); }
+
+    // ========= Cosméticos / Inventario (sin cambios de lógica) =========
     public long insertarCosmetico(SQLiteDatabase db, String nombre, String tipo, int precio, String asset) {
         ContentValues cv = new ContentValues();
         cv.put(COL_COSM_NOMBRE, nombre);
@@ -320,10 +546,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     // ========= COMPRA =========
-    /**
-     * Compra un cosmético: descuenta saldo, agrega al inventario y opcionalmente equipa.
-     * @return BUY_OK / BUY_ALREADY_OWNED / BUY_NO_FUNDS / BUY_INVALID_ITEM
-     */
     public int comprarCosmetico(long userId, long cosmeticoId, boolean autoEquip) {
         int precio = getPrecioCosmetico(cosmeticoId);
         String tipo = getTipoCosmetico(cosmeticoId);
@@ -336,18 +558,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
-            // Descontar saldo
             ContentValues cv = new ContentValues();
             cv.put(COL_SALDO, saldo - precio);
             int rows = db.update(TABLE_USUARIOS, cv, COL_ID + "=?", new String[]{String.valueOf(userId)});
             if (rows <= 0) { db.endTransaction(); return BUY_INVALID_ITEM; }
 
-            // Agregar al inventario
             db.execSQL("INSERT OR IGNORE INTO " + TABLE_INV +
                             " (" + COL_INV_USER_ID + ", " + COL_INV_COSM_ID + ") VALUES (?,?)",
                     new Object[]{userId, cosmeticoId});
 
-            // Equipar si corresponde
             if (autoEquip) {
                 db.execSQL("INSERT OR REPLACE INTO " + TABLE_EQUIP +
                                 " (" + COL_EQ_USER_ID + ", " + COL_EQ_TIPO + ", " + COL_EQ_COSM_ID + ") VALUES (?,?,?)",

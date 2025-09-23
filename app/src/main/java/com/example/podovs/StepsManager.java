@@ -66,14 +66,10 @@ public class StepsManager {
         stepsToday = prefs.getLong(keyTotalToday, 0L);
     }
 
-    // ---------- API ----------
     /** Idempotente: si ya está escuchando, no hace nada. */
     public void start() {
-        if (listening) {
-            // emito el valor actual por si la UI se recreó
-            emitUpdate();
-            return;
-        }
+        if (listening) { emitUpdate(); return; }
+
         if (stepCounter != null) {
             usingDetector = false;
             sensorManager.registerListener(listener, stepCounter, SensorManager.SENSOR_DELAY_GAME);
@@ -81,32 +77,28 @@ public class StepsManager {
             usingDetector = true;
             sensorManager.registerListener(listener, stepDetector, SensorManager.SENSOR_DELAY_GAME);
         } else {
-            // sin sensor no hay nada que hacer
             listening = false;
-            emitUpdate(); // mostrará 0 o el último persistido
+            emitUpdate();
             return;
         }
         listening = true;
 
-        // scheduler BDD (cada 3s)
+        // Guardado en BDD cada 3 s (ahora usando stats)
         if (dbScheduler == null || dbScheduler.isShutdown()) {
             dbScheduler = Executors.newSingleThreadScheduledExecutor();
             dbScheduler.scheduleAtFixedRate(() -> {
                 long s = stepsToday;
                 double km = round2(s * METROS_POR_PASO / 1000.0);
+
                 if (userId > 0) {
-                    db.getWritableDatabase().execSQL(
-                            "UPDATE " + DatabaseHelper.TABLE_USUARIOS +
-                                    " SET " + DatabaseHelper.COL_KM_HOY + " = ? WHERE " + DatabaseHelper.COL_ID + " = ?",
-                            new Object[]{km, userId}
-                    );
+                    // >>> cambio principal: escribir en 'estadisticas' vía helper
+                    db.updateKmHoy(userId, km);
                 }
-                // también notifico por si la UI quiere refrescar km_hoy
+
                 mainHandler.post(() -> callback.onStepsUpdated(s, km));
             }, 0, 3, TimeUnit.SECONDS);
         }
 
-        // notificación inicial a la UI
         emitUpdate();
     }
 
@@ -121,9 +113,9 @@ public class StepsManager {
 
     public long getStepsToday() { return stepsToday; }
 
-    // ---------- Internals ----------
+    // Listener interno
     private final SensorEventListener listener = new SensorEventListener() {
-        @Override public void onSensorChanged(android.hardware.SensorEvent event) {
+        @Override public void onSensorChanged(SensorEvent event) {
             ensureTodayKeys();
 
             if (!usingDetector && event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
@@ -187,4 +179,3 @@ public class StepsManager {
 
     private static double round2(double v) { return Math.round(v * 100.0) / 100.0; }
 }
-

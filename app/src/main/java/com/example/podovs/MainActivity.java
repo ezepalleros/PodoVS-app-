@@ -4,7 +4,6 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
 import android.os.Build;
 import android.os.Bundle;
 import android.widget.ImageView;
@@ -20,8 +19,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    // UI
-    private TextView tvKmTotalBig;     // ahora: PASOS HOY (número grande)
+    private TextView tvKmTotalBig;     // PASOS HOY (número grande)
     private TextView tvKmSemanaSmall;  // "Semana: xx.xx km"
     private ImageView ivAvatar;
 
@@ -53,7 +51,6 @@ public class MainActivity extends AppCompatActivity {
 
         db = new DatabaseHelper(this);
 
-        // Sesión requerida
         SharedPreferences sp = getSharedPreferences("session", MODE_PRIVATE);
         userId = sp.getLong("user_id", -1L);
         if (userId <= 0) {
@@ -62,18 +59,26 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Cargar km de la semana al iniciar
-        tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", getKmSemanaFromDb()));
-
-        // Mostrar un valor inicial de pasos
+        tvKmSemanaSmall.setText(String.format(Locale.getDefault(),
+                "Semana: %.2f km", db.getKmSemana(userId)));
         tvKmTotalBig.setText("0");
 
-        // StepsManager: cada update refresca los pasos (número grande)
-        // y re-lee km_semana desde la BDD por si cambió en otro flujo.
         stepsManager = new StepsManager(this, db, userId, (stepsToday, kmHoy) -> {
             tvKmTotalBig.setText(String.valueOf(stepsToday));
-            tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", getKmSemanaFromDb()));
+            tvKmSemanaSmall.setText(String.format(Locale.getDefault(),
+                    "Semana: %.2f km", db.getKmSemana(userId)));
         });
+
+        // --- Clicks de la fila superior ---
+        findViewById(R.id.btnTopGoals).setOnClickListener(v -> openGoalsFragment());
+        findViewById(R.id.btnTopStats).setOnClickListener(v ->
+                Toast.makeText(this, "Stats (próximamente)", Toast.LENGTH_SHORT).show());
+        findViewById(R.id.btnTopProfile).setOnClickListener(v ->
+                Toast.makeText(this, "Perfil (próximamente)", Toast.LENGTH_SHORT).show());
+        findViewById(R.id.btnTopNotifications).setOnClickListener(v ->
+                Toast.makeText(this, "Notificaciones (próximamente)", Toast.LENGTH_SHORT).show());
+        findViewById(R.id.btnTopOptions).setOnClickListener(v ->
+                Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
         requestRuntimePermissions();
     }
@@ -96,29 +101,24 @@ public class MainActivity extends AppCompatActivity {
         if (stepsManager != null) stepsManager.stop();
     }
 
-    private double getKmSemanaFromDb() {
-        double kmSemana = 0.0;
-        Cursor c = db.getReadableDatabase().rawQuery(
-                "SELECT " + DatabaseHelper.COL_KM_SEMANA +
-                        " FROM " + DatabaseHelper.TABLE_USUARIOS +
-                        " WHERE " + DatabaseHelper.COL_ID + "=? LIMIT 1",
-                new String[]{String.valueOf(userId)}
-        );
-        if (c != null) {
-            if (c.moveToFirst()) kmSemana = c.getDouble(0);
-            c.close();
-        }
-        return kmSemana;
+    private void openGoalsFragment() {
+        getSupportFragmentManager()
+                .beginTransaction()
+                .setCustomAnimations(
+                        android.R.anim.fade_in,  android.R.anim.fade_out,
+                        android.R.anim.fade_in,  android.R.anim.fade_out)
+                .replace(R.id.root, new GoalsFragment())
+                .addToBackStack("goals")
+                .commit();
     }
 
-    // ---- Permisos ----
     private void requestRuntimePermissions() {
         boolean needAR = (Build.VERSION.SDK_INT >= 29) &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
                         != PackageManager.PERMISSION_GRANTED;
 
         if (needAR) {
-            permsLauncher.launch(new String[]{Manifest.permission.ACTIVITY_RECOGNITION});
+            permsLauncher.launch(new String[]{ Manifest.permission.ACTIVITY_RECOGNITION });
         } else {
             if (stepsManager != null) stepsManager.start();
         }
