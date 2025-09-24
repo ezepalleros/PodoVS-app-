@@ -1,69 +1,148 @@
 package com.example.podovs;
 
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 
-import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 
-public class NotificationHelper {
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public final class NotificationHelper {
 
     private static final String CHANNEL_ID = "podovs_channel";
+    private static final String CHANNEL_NAME = "PodoVS Notificaciones";
+    private static final String CHANNEL_DESC = "Notificaciones de metas y nivel";
+
+    private static final String PREFS = "podovs_notif_store";
+    private static final String KEY_LIST = "list";
+    private static final int MAX_STORED = 50;
+
+    private NotificationHelper() {}
+
+    // ================== API pública ==================
+
+    public static void showGoalClaimAvailable(Context context, String goalType) {
+        String title = "¡Reclamo disponible!";
+        String body  = "Tenés la meta " + goalType + " lista para reclamar.";
+        pushAndLog(context, title, body, android.R.drawable.ic_dialog_info);
+    }
+
+    /** (Si aún la usas) Notifica meta reclamada. */
+    public static void showGoalCompleted(Context context, String goalType) {
+        String title = "Meta completada 🎉";
+        String body  = "Completaste tu meta " + goalType + ". ¡Bien hecho!";
+        pushAndLog(context, title, body, android.R.drawable.ic_dialog_info);
+    }
+
+    /** Notifica subida de nivel. */
+    public static void showLevelUp(Context context, int newLevel) {
+        String title = "¡Subiste de nivel! ⭐";
+        String body  = "Ahora sos nivel " + newLevel + ". ¡Seguí así!";
+        pushAndLog(context, title, body, android.R.drawable.star_big_on);
+    }
+
+    /** Devuelve las últimas N notificaciones guardadas (orden: más reciente primero). */
+    public static List<Item> getLast(Context context, int n) {
+        ArrayList<Item> out = new ArrayList<>();
+        try {
+            SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String raw = sp.getString(KEY_LIST, "[]");
+            JSONArray arr = new JSONArray(raw);
+            for (int i = arr.length() - 1; i >= 0 && out.size() < n; i--) {
+                JSONObject o = arr.getJSONObject(i);
+                out.add(new Item(
+                        o.optLong("ts", 0L),
+                        o.optString("title", ""),
+                        o.optString("text", "")
+                ));
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    private static void pushAndLog(Context context, String title, String body, int smallIcon) {
+        log(context, title, body);
+        ensureChannel(context);
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(smallIcon)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+
+        try {
+            if (canPostNotifications(context)) {
+                NotificationManagerCompat.from(context)
+                        .notify((int) System.currentTimeMillis(), builder.build());
+            }
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    private static boolean canPostNotifications(Context context) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
 
     private static void ensureChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "PodoVS Notificaciones",
-                    NotificationManager.IMPORTANCE_DEFAULT
+                    CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT
             );
-            channel.setDescription("Notificaciones de metas y nivel");
+            channel.setDescription(CHANNEL_DESC);
             NotificationManager manager = context.getSystemService(NotificationManager.class);
-            if (manager != null) {
-                manager.createNotificationChannel(channel);
+            if (manager != null) manager.createNotificationChannel(channel);
+        }
+    }
+
+    private static void log(Context context, String title, String text) {
+        try {
+            SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String raw = sp.getString(KEY_LIST, "[]");
+            JSONArray arr = new JSONArray(raw);
+
+            JSONObject obj = new JSONObject();
+            obj.put("ts", System.currentTimeMillis());
+            obj.put("title", title == null ? "" : title);
+            obj.put("text", text == null ? "" : text);
+
+            arr.put(obj);
+
+            if (arr.length() > MAX_STORED) {
+                JSONArray trimmed = new JSONArray();
+                for (int i = arr.length() - MAX_STORED; i < arr.length(); i++) {
+                    trimmed.put(arr.getJSONObject(i));
+                }
+                arr = trimmed;
             }
-        }
+
+            sp.edit().putString(KEY_LIST, arr.toString()).apply();
+        } catch (Exception ignored) {}
     }
 
-    public static void showGoalCompleted(Context context, String goalType) {
-        ensureChannel(context);
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("Meta completada 🎉")
-                .setContentText("Completaste tu meta " + goalType + ". ¡Bien hecho!")
-                .setAutoCancel(true);
+    public static class Item {
+        public final long ts;
+        public final String title;
+        public final String text;
 
-        if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-            // El permiso no fue concedido, no mostramos la notificación
-            return;
+        public Item(long ts, String title, String text) {
+            this.ts = ts;
+            this.title = title;
+            this.text = text;
         }
-        NotificationManagerCompat.from(context).notify(
-                (int) System.currentTimeMillis(),
-                builder.build()
-        );
-    }
-
-    public static void showLevelUp(Context context, int newLevel) {
-        ensureChannel(context);
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.star_big_on)
-                .setContentTitle("¡Subiste de nivel! ⭐")
-                .setContentText("Ahora sos nivel " + newLevel + ". ¡Seguí así!")
-                .setAutoCancel(true);
-
-        if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-            // El permiso no fue concedido, no mostramos la notificación
-            return;
-        }
-        NotificationManagerCompat.from(context).notify(
-                (int) System.currentTimeMillis(),
-                builder.build()
-        );
     }
 }

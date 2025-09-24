@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -21,6 +22,8 @@ import java.util.Date;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String TAG = "MainActivity";
 
     private TextView tvKmTotalBig;     // PASOS HOY (número grande)
     private TextView tvKmSemanaSmall;  // "Semana: xx.xx km"
@@ -45,12 +48,13 @@ public class MainActivity extends AppCompatActivity {
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
                 boolean arGranted = result.getOrDefault(Manifest.permission.ACTIVITY_RECOGNITION, false)
                         || Build.VERSION.SDK_INT < 29; // en <29 no existe
+                // POST_NOTIFICATIONS podría estar o no concedido; NotificationHelper ya lo chequea internamente.
+
                 if (arGranted) {
-                    if (stepsManager != null) stepsManager.start();
+                    secureStartSteps();
                 } else {
                     Toast.makeText(this, "Permiso de actividad física denegado.", Toast.LENGTH_LONG).show();
                 }
-                // POST_NOTIFICATIONS puede ser denegado sin bloquear nada crítico
             });
 
     @Override
@@ -105,8 +109,7 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopStats).setOnClickListener(v -> openStatsFragment());
         findViewById(R.id.btnTopProfile).setOnClickListener(v ->
                 Toast.makeText(this, "Perfil (próximamente)", Toast.LENGTH_SHORT).show());
-        findViewById(R.id.btnTopNotifications).setOnClickListener(v ->
-                Toast.makeText(this, "Notificaciones (próximamente)", Toast.LENGTH_SHORT).show());
+        findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
         findViewById(R.id.btnTopOptions).setOnClickListener(v ->
                 Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
@@ -129,19 +132,19 @@ public class MainActivity extends AppCompatActivity {
         maybeRunRollover(); // por si cambiamos de día mientras la app estaba en background
         updateSmallWeekAndBigStepsFromStorage();
 
-        if (ensureARGranted() && stepsManager != null) stepsManager.start();
+        secureStartSteps();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (stepsManager != null) stepsManager.stop();
+        secureStopSteps();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (stepsManager != null) stepsManager.stop();
+        secureStopSteps();
     }
 
     private void openGoalsFragment() {
@@ -166,6 +169,17 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
+    private void openNotificationsFragment() {
+        getSupportFragmentManager()
+                .beginTransaction()
+                .setCustomAnimations(
+                        android.R.anim.fade_in,  android.R.anim.fade_out,
+                        android.R.anim.fade_in,  android.R.anim.fade_out)
+                .replace(R.id.root, new NotificationFragment())
+                .addToBackStack("notifications")
+                .commit();
+    }
+
     private void requestRuntimePermissions() {
         ArrayList<String> req = new ArrayList<>();
 
@@ -183,14 +197,35 @@ public class MainActivity extends AppCompatActivity {
         if (!req.isEmpty()) {
             permsLauncher.launch(req.toArray(new String[0]));
         } else {
-            if (stepsManager != null) stepsManager.start();
+            secureStartSteps();
         }
     }
+
+    // ====== Helpers de permisos/seguridad ======
 
     private boolean ensureARGranted() {
         return !(Build.VERSION.SDK_INT >= 29) ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
                         == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void secureStartSteps() {
+        if (stepsManager == null) return;
+        if (!ensureARGranted()) return;
+        try {
+            stepsManager.start();
+        } catch (SecurityException se) {
+            Log.w(TAG, "SecurityException al iniciar StepsManager (permiso revocado?): " + se.getMessage());
+        }
+    }
+
+    private void secureStopSteps() {
+        if (stepsManager == null) return;
+        try {
+            stepsManager.stop();
+        } catch (SecurityException se) {
+            Log.w(TAG, "SecurityException al detener StepsManager: " + se.getMessage());
+        }
     }
 
     private void refreshCoins() {

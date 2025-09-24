@@ -562,8 +562,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new Object[]{userId}
         );
 
-        // Notificación y XP
-        NotificationHelper.showGoalCompleted(appContext, "diaria");
         return addXpAndMaybeLevelUp(userId, XP_DAILY);
     }
 
@@ -576,8 +574,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new Object[]{userId}
         );
 
-        // Notificación y XP
-        NotificationHelper.showGoalCompleted(appContext, "semanal");
         return addXpAndMaybeLevelUp(userId, XP_WEEKLY);
     }
 
