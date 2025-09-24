@@ -68,6 +68,20 @@ public class StatsFragment extends Fragment {
             return;
         }
 
+        // Escuchar eventos de actualización cuando se reclaman metas
+        getParentFragmentManager().setFragmentResultListener(
+                "stats_refresh",
+                this,
+                (requestKey, bundle) -> loadStats()
+        );
+
+        loadStats();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Por si volvemos desde GoalsFragment sin evento explícito
         loadStats();
     }
 

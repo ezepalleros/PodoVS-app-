@@ -554,12 +554,29 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public int onDailyGoalReached(long userId)  {
-        // Notificación de meta diaria
+        // +1 a metas_diarias_ok
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL(
+                "UPDATE " + TABLE_STATS + " SET " + COL_ST_METAS_DIARIAS_OK + " = " + COL_ST_METAS_DIARIAS_OK + " + 1 " +
+                        "WHERE " + COL_ST_ID + " = (SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{userId}
+        );
+
+        // Notificación y XP
         NotificationHelper.showGoalCompleted(appContext, "diaria");
         return addXpAndMaybeLevelUp(userId, XP_DAILY);
     }
+
     public int onWeeklyGoalReached(long userId) {
-        // Notificación de meta semanal
+        // +1 a metas_semanales_ok
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL(
+                "UPDATE " + TABLE_STATS + " SET " + COL_ST_METAS_SEMANALES_OK + " = " + COL_ST_METAS_SEMANALES_OK + " + 1 " +
+                        "WHERE " + COL_ST_ID + " = (SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{userId}
+        );
+
+        // Notificación y XP
         NotificationHelper.showGoalCompleted(appContext, "semanal");
         return addXpAndMaybeLevelUp(userId, XP_WEEKLY);
     }
