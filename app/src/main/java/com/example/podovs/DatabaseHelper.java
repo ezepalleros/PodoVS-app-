@@ -9,7 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "podovs.db";
-    private static final int DB_VERSION = 4;
+    private static final int DB_VERSION = 6; // mantenemos 6
 
     // ------- Usuarios -------
     public static final String TABLE_USUARIOS   = "usuarios";
@@ -27,9 +27,16 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public static final String COL_ST_ID            = "id";
     public static final String COL_ST_KM_HOY        = "km_hoy";
     public static final String COL_ST_KM_SEMANA     = "km_semana";
+    public static final String COL_ST_KM_TOTAL      = "km_total";
     public static final String COL_ST_PASOS_TOTALES = "pasos_totales";
     public static final String COL_ST_META_DIARIA   = "meta_diaria_pasos";
     public static final String COL_ST_META_SEMANAL  = "meta_semanal_pasos";
+    public static final String COL_ST_CARRERAS_GANADAS   = "carreras_ganadas";
+    public static final String COL_ST_OBJ_COMPRADOS      = "objetos_comprados";
+    public static final String COL_ST_EVENTOS_PART       = "eventos_participados";
+    public static final String COL_ST_MEJOR_POS_MENSUAL  = "mejor_posicion_mensual";
+    public static final String COL_ST_METAS_DIARIAS_OK   = "metas_diarias_ok";
+    public static final String COL_ST_METAS_SEMANALES_OK = "metas_semanales_ok";
     public static final String COL_ST_XP            = "xp";
 
     // ------- Cosméticos -------
@@ -78,13 +85,20 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public void onCreate(SQLiteDatabase db) {
         // 1) Estadísticas
         db.execSQL("CREATE TABLE " + TABLE_STATS + " (" +
-                COL_ST_ID            + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                COL_ST_KM_HOY        + " DECIMAL(6,2) DEFAULT 0, " +
-                COL_ST_KM_SEMANA     + " DECIMAL(7,2) DEFAULT 0, " +
-                COL_ST_PASOS_TOTALES + " INTEGER       DEFAULT 0, " +
-                COL_ST_META_DIARIA   + " INTEGER       DEFAULT " + BASE_DIARIA + ", " +
-                COL_ST_META_SEMANAL  + " INTEGER       DEFAULT " + BASE_SEMANAL + ", " +
-                COL_ST_XP            + " INTEGER       DEFAULT 0" +
+                COL_ST_ID                 + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                COL_ST_KM_HOY             + " DECIMAL(6,2) DEFAULT 0, " +
+                COL_ST_KM_SEMANA          + " DECIMAL(7,2) DEFAULT 0, " +
+                COL_ST_KM_TOTAL           + " DECIMAL(9,2) DEFAULT 0, " +
+                COL_ST_PASOS_TOTALES      + " INTEGER       DEFAULT 0, " +
+                COL_ST_META_DIARIA        + " INTEGER       DEFAULT " + BASE_DIARIA + ", " +
+                COL_ST_META_SEMANAL       + " INTEGER       DEFAULT " + BASE_SEMANAL + ", " +
+                COL_ST_CARRERAS_GANADAS   + " INTEGER       DEFAULT 0, " +
+                COL_ST_OBJ_COMPRADOS      + " INTEGER       DEFAULT 0, " +
+                COL_ST_EVENTOS_PART       + " INTEGER       DEFAULT 0, " +
+                COL_ST_MEJOR_POS_MENSUAL  + " INTEGER       DEFAULT NULL, " +
+                COL_ST_METAS_DIARIAS_OK   + " INTEGER       DEFAULT 0, " +
+                COL_ST_METAS_SEMANALES_OK + " INTEGER       DEFAULT 0, " +
+                COL_ST_XP                 + " INTEGER       DEFAULT 0" +
                 ");");
 
         // 2) Usuarios
@@ -128,7 +142,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "FOREIGN KEY (" + COL_EQ_COSM_ID + ") REFERENCES " + TABLE_COSMETICOS + "(" + COL_COSM_ID + ") ON DELETE CASCADE" +
                 ");");
 
-        seedUsuariosYStats(db);
+        // Seeds usando SOLO el "db" recibido (sin abrir DB de nuevo)
+        seedSoloMartinUnsafe(db);
         seedCosmeticos(db);
     }
 
@@ -192,10 +207,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 cur.close();
             }
         }
+        if (oldVersion < 5) {
+            try { db.execSQL("ALTER TABLE " + TABLE_STATS + " ADD COLUMN " + COL_ST_KM_TOTAL           + " DECIMAL(9,2) DEFAULT 0"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_STATS + " ADD COLUMN " + COL_ST_CARRERAS_GANADAS   + " INTEGER      DEFAULT 0"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_STATS + " ADD COLUMN " + COL_ST_OBJ_COMPRADOS      + " INTEGER      DEFAULT 0"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_STATS + " ADD COLUMN " + COL_ST_EVENTOS_PART       + " INTEGER      DEFAULT 0"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_STATS + " ADD COLUMN " + COL_ST_MEJOR_POS_MENSUAL  + " INTEGER      DEFAULT NULL"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_STATS + " ADD COLUMN " + COL_ST_METAS_DIARIAS_OK   + " INTEGER      DEFAULT 0"); } catch (Exception ignored) {}
+            try { db.execSQL("ALTER TABLE " + TABLE_STATS + " ADD COLUMN " + COL_ST_METAS_SEMANALES_OK + " INTEGER      DEFAULT 0"); } catch (Exception ignored) {}
+        }
+        if (oldVersion < 6) {
+            // Limpiar y dejar solo a Martín (usar SIEMPRE el "db" recibido)
+            db.delete(TABLE_EQUIP, null, null);
+            db.delete(TABLE_INV, null, null);
+            db.delete(TABLE_USUARIOS, null, null);
+            db.delete(TABLE_STATS, null, null);
+            seedSoloMartinUnsafe(db);
+        }
     }
 
     public long registrarUsuario(String nombre, String email, String password, String dificultad, long saldoInicial) {
-        // normalizar dificultad a valores válidos del CHECK
         String dif = "medio";
         if ("bajo".equalsIgnoreCase(dificultad)) dif = "bajo";
         else if ("alto".equalsIgnoreCase(dificultad)) dif = "alto";
@@ -203,7 +234,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         try {
             SQLiteDatabase db = getWritableDatabase();
 
-            // stats iniciales
             int nivel = 1;
             int metaD = targetFor(nivel, dif, BASE_DIARIA);
             int metaS = targetFor(nivel, dif, BASE_SEMANAL);
@@ -232,27 +262,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             return userId;
 
         } catch (android.database.sqlite.SQLiteConstraintException ex) {
-            // UNIQUE(email) violado
             return -2;
         } catch (Exception e) {
             return -1;
         }
     }
 
+    // ====== Seeds (UNSAFE: usan el "db" provisto) ======
+    private void seedSoloMartinUnsafe(SQLiteDatabase db) {
+        long u1 = insertarUsuarioUnsafe(db,"Martín Blanco", "martin.blanco@example.com", "1234", 500, "medio");
 
-    // ====== Seeds ======
-    private void seedUsuariosYStats(SQLiteDatabase db) {
-        long u1 = insertarUsuario(db,"Martín Blanco", "martin.blanco@example.com", "1234", 500, "medio");
-        long u2 = insertarUsuario(db,"Julieta Torres", "julieta.torres@example.com", "abcd", 450, "medio");
-        long u3 = insertarUsuario(db,"Rodolfo Cervantes", "rodolfo.cervantes@example.com", "1111", 300, "medio");
-        long u4 = insertarUsuario(db,"Lucía Fernández", "lucia.fernandez@example.com", "pass123", 700, "medio");
-        long u5 = insertarUsuario(db,"Ezequiel Palleros", "ezequiel.palleros@example.com", "test", 1000,"medio");
-
-        setKmHoy(u1, 2.50); setKmSemana(u1, 12.70);
-        setKmHoy(u2, 4.10); setKmSemana(u2, 20.30);
-        setKmHoy(u3, 0.80); setKmSemana(u3, 5.00);
-        setKmHoy(u4, 6.00); setKmSemana(u4, 25.90);
-        setKmHoy(u5, 3.30); setKmSemana(u5, 15.20);
+        // 15 km totales y 90 XP (a 10 de subir). También seteo hoy/semana como antes.
+        setKmTotalUnsafe(db, u1, 15.00);
+        setXpRawUnsafe(db, u1, 90);
+        setKmHoyUnsafe(db, u1, 2.50);
+        setKmSemanaUnsafe(db, u1, 12.70);
     }
 
     private void seedCosmeticos(SQLiteDatabase db) {
@@ -265,7 +289,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     // ====== Helpers de creación usuario + stats ======
-    private long insertarUsuario(SQLiteDatabase db, String nombre, String email, String password, long saldoInicial, String dificultad) {
+    private long insertarUsuarioUnsafe(SQLiteDatabase db, String nombre, String email, String password, long saldoInicial, String dificultad) {
         int nivel = 1;
         int metaD = targetFor(nivel, dificultad, BASE_DIARIA);
         int metaS = targetFor(nivel, dificultad, BASE_SEMANAL);
@@ -373,7 +397,16 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         try { return c.moveToFirst() ? c.getDouble(0) : 0.0; }
         finally { c.close(); }
     }
+    public double getKmTotal(long userId) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT s." + COL_ST_KM_TOTAL +
+                " FROM " + TABLE_STATS + " s JOIN " + TABLE_USUARIOS + " u ON u." + COL_STATS_FK + "=s." + COL_ST_ID +
+                " WHERE u." + COL_ID + "=? LIMIT 1", new String[]{String.valueOf(userId)});
+        try { return c.moveToFirst() ? c.getDouble(0) : 0.0; }
+        finally { c.close(); }
+    }
 
+    // ===== Métodos públicos (abren DB) =====
     public void updateKmHoy(long userId, double kmHoy) {
         SQLiteDatabase db = getWritableDatabase();
         db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_KM_HOY + "=? WHERE " +
@@ -386,9 +419,42 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                         COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
                 new Object[]{kmSem, userId});
     }
-
     public void setKmHoy(long userId, double kmHoy) { updateKmHoy(userId, kmHoy); }
     public void setKmSemana(long userId, double kmSemana) { updateKmSemana(userId, kmSemana); }
+    public void setKmTotal(long userId, double kmTotal) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_KM_TOTAL + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{kmTotal, userId});
+    }
+    public void setXpRaw(long userId, int xp) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_XP + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{xp, userId});
+    }
+
+    // ===== Versiones UNSAFE que NO abren la DB (para seeds/upgrade) =====
+    private void setKmHoyUnsafe(SQLiteDatabase db, long userId, double kmHoy) {
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_KM_HOY + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{kmHoy, userId});
+    }
+    private void setKmSemanaUnsafe(SQLiteDatabase db, long userId, double kmSem) {
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_KM_SEMANA + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{kmSem, userId});
+    }
+    private void setKmTotalUnsafe(SQLiteDatabase db, long userId, double kmTotal) {
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_KM_TOTAL + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{kmTotal, userId});
+    }
+    private void setXpRawUnsafe(SQLiteDatabase db, long userId, int xp) {
+        db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_XP + "=? WHERE " +
+                        COL_ST_ID + "=(SELECT " + COL_STATS_FK + " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=? LIMIT 1)",
+                new Object[]{xp, userId});
+    }
 
     public int[] getMetas(long userId) {
         SQLiteDatabase db = getReadableDatabase();
@@ -437,11 +503,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new Object[]{metaD, metaS, userId});
     }
 
-    /**
-     * Suma deltaXp al XP actual. Si alcanza o supera 100, sube de nivel,
-     * deja el resto (carry) en s.xp y recalcula las metas según dificultad y nuevo nivel.
-     * Todo atómico en una transacción.
-     */
     public int addXpAndMaybeLevelUp(long userId, int deltaXp) {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
@@ -452,7 +513,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 return getNivel(userId);
             }
 
-            // Leer XP actual
             int xp = 0;
             Cursor c = db.rawQuery("SELECT " + COL_ST_XP + " FROM " + TABLE_STATS + " WHERE " + COL_ST_ID + "=?",
                     new String[]{String.valueOf(statsId)});
@@ -461,24 +521,20 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
             xp += deltaXp;
 
-            // Subir niveles según sea necesario
             int nivel = getNivel(userId);
             while (xp >= XP_PER_LEVEL) {
-                xp -= XP_PER_LEVEL; // carry del resto
+                xp -= XP_PER_LEVEL;
                 nivel += 1;
             }
 
-            // Guardar XP restante
             ContentValues cvS = new ContentValues();
             cvS.put(COL_ST_XP, xp);
             db.update(TABLE_STATS, cvS, COL_ST_ID + "=?", new String[]{String.valueOf(statsId)});
 
-            // Guardar nivel (si cambió)
             ContentValues cvU = new ContentValues();
             cvU.put(COL_NIVEL, nivel);
             db.update(TABLE_USUARIOS, cvU, COL_ID + "=?", new String[]{String.valueOf(userId)});
 
-            // Recalcular metas por nuevo nivel/dificultad
             int metaD = targetFor(nivel, getDificultad(userId), BASE_DIARIA);
             int metaS = targetFor(nivel, getDificultad(userId), BASE_SEMANAL);
             db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_META_DIARIA + "=?, " + COL_ST_META_SEMANAL + "=? WHERE " +
