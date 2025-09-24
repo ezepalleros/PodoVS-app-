@@ -11,6 +11,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "podovs.db";
     private static final int DB_VERSION = 6; // mantenemos 6
 
+    private Context appContext;
+
     // ------- Usuarios -------
     public static final String TABLE_USUARIOS   = "usuarios";
     public static final String COL_ID           = "id";
@@ -79,6 +81,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public DatabaseHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
+        this.appContext = context.getApplicationContext();
     }
 
     @Override
@@ -525,6 +528,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             while (xp >= XP_PER_LEVEL) {
                 xp -= XP_PER_LEVEL;
                 nivel += 1;
+                // Notificación de level up
+                NotificationHelper.showLevelUp(appContext, nivel);
             }
 
             ContentValues cvS = new ContentValues();
@@ -548,8 +553,16 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    public int onDailyGoalReached(long userId)  { return addXpAndMaybeLevelUp(userId, XP_DAILY); }
-    public int onWeeklyGoalReached(long userId) { return addXpAndMaybeLevelUp(userId, XP_WEEKLY); }
+    public int onDailyGoalReached(long userId)  {
+        // Notificación de meta diaria
+        NotificationHelper.showGoalCompleted(appContext, "diaria");
+        return addXpAndMaybeLevelUp(userId, XP_DAILY);
+    }
+    public int onWeeklyGoalReached(long userId) {
+        // Notificación de meta semanal
+        NotificationHelper.showGoalCompleted(appContext, "semanal");
+        return addXpAndMaybeLevelUp(userId, XP_WEEKLY);
+    }
 
     // ========= Cosméticos / Inventario =========
     public long insertarCosmetico(SQLiteDatabase db, String nombre, String tipo, int precio, String asset) {

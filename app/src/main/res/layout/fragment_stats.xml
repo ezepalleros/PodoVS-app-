@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootOverlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#80000000"
+    android:padding="20dp">
+
+    <!-- Ventana modal centrada (más pequeña) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cardModal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginHorizontal="40dp"
+        app:cardBackgroundColor="#2B2B2F"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="8dp"
+        app:cardUseCompatPadding="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Estadísticas"
+                    android:textColor="@android:color/white"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnClose"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@android:color/transparent"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel" />
+            </LinearLayout>
+
+            <!-- Contenido scrolleable (alto fijo para forzar scroll) -->
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="380dp"
+                android:fillViewport="true"
+                android:overScrollMode="ifContentScrolls">
+
+                <LinearLayout
+                    android:id="@+id/contentLinear"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:divider="?android:attr/dividerVertical"
+                    android:showDividers="middle"
+                    android:dividerPadding="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <!-- Pasos totales -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Pasos totales"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvPasosTotales"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                    <!-- Kilómetros totales -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Kilómetros totales"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvKmTotales"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0.00 km"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                    <!-- Carreras ganadas -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Carreras ganadas"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvCarrerasGanadas"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                    <!-- Objetos comprados -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Objetos comprados"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvObjetosComprados"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                    <!-- Eventos participados -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Eventos participados"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvEventosParticipados"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                    <!-- Mejor posición mensual -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Mejor posición mensual"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvMejorPosicionMensual"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="-"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                    <!-- Metas diarias completadas -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Metas diarias completadas (total)"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvMetasDiariasOk"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                    <!-- Metas semanales completadas -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#32333A"
+                        android:padding="16dp"
+                        android:clipToOutline="true">
+
+                        <TextView
+                            android:text="Metas semanales completadas (total)"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+
+                        <TextView
+                            android:id="@+id/tvMetasSemanalesOk"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textSize="20sp"
+                            android:textColor="#C7CAD1"
+                            android:paddingTop="6dp"/>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </ScrollView>
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+</FrameLayout>
