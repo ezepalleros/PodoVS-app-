@@ -163,6 +163,39 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="2dp"/>
 
+    <!-- MONEDAS (arriba del avatar) -->
+    <LinearLayout
+        android:id="@+id/rowCoins"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="6dp"
+        app:layout_constraintTop_toBottomOf="@id/tvKmTotalBig"
+        app:layout_constraintBottom_toTopOf="@id/ivAvatar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="2dp">
+
+        <ImageView
+            android:id="@+id/ivCoin"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/my_coins"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:id="@+id/tvCoins"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#30343A"
+            android:text="0" />
+    </LinearLayout>
+
     <!-- Avatar más grande -->
     <ImageView
         android:id="@+id/ivAvatar"
@@ -170,7 +203,7 @@
         android:layout_height="340dp"
         android:src="@drawable/default_avatar"
         android:scaleType="centerInside"
-        app:layout_constraintTop_toBottomOf="@id/tvKmTotalBig"
+        app:layout_constraintTop_toBottomOf="@id/rowCoins"
         app:layout_constraintBottom_toTopOf="@id/rowSemanaPasos"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

@@ -1,15 +1,15 @@
 package com.example.podovs;
 
-import android.content.Context;
-import android.database.sqlite.SQLiteOpenHelper;
-import android.database.sqlite.SQLiteDatabase;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "podovs.db";
-    private static final int DB_VERSION = 4; // ⬅️ nueva versión
+    private static final int DB_VERSION = 4;
 
     // ------- Usuarios -------
     public static final String TABLE_USUARIOS   = "usuarios";
@@ -18,11 +18,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public static final String COL_EMAIL        = "email";
     public static final String COL_PASSWORD     = "password";
     public static final String COL_SALDO        = "saldo";
-    public static final String COL_NIVEL        = "nivel";        // NEW
-    public static final String COL_DIFICULTAD   = "dificultad";   // NEW: bajo/medio/alto
-    public static final String COL_STATS_FK     = "stats_id";     // NEW: FK → estadisticas.id
+    public static final String COL_NIVEL        = "nivel";
+    public static final String COL_DIFICULTAD   = "dificultad";
+    public static final String COL_STATS_FK     = "stats_id";
 
-    // ------- Estadísticas (NEW) -------
+    // ------- Estadísticas -------
     public static final String TABLE_STATS          = "estadisticas";
     public static final String COL_ST_ID            = "id";
     public static final String COL_ST_KM_HOY        = "km_hoy";
@@ -30,7 +30,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public static final String COL_ST_PASOS_TOTALES = "pasos_totales";
     public static final String COL_ST_META_DIARIA   = "meta_diaria_pasos";
     public static final String COL_ST_META_SEMANAL  = "meta_semanal_pasos";
-    public static final String COL_ST_XP            = "xp";          // progreso dentro del nivel actual
+    public static final String COL_ST_XP            = "xp";
 
     // ------- Cosméticos -------
     public static final String TABLE_COSMETICOS  = "cosmeticos";
@@ -100,7 +100,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "FOREIGN KEY(" + COL_STATS_FK + ") REFERENCES " + TABLE_STATS + "(" + COL_ST_ID + ") ON DELETE SET NULL" +
                 ");");
 
-        // 3) Cosméticos / Inventario / Equipado (sin cambios)
+        // 3) Cosméticos / Inventario / Equipado
         db.execSQL("CREATE TABLE " + TABLE_COSMETICOS + " (" +
                 COL_COSM_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
                 COL_COSM_NOMBRE + " TEXT NOT NULL, " +
@@ -134,9 +134,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // v2 ya la tenías (cosméticos/inventario/equipado)
         if (oldVersion < 3) {
-            // Asegurar columna saldo si no existiera (por compatibilidad)
             try { db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_SALDO + " INTEGER NOT NULL DEFAULT 0"); } catch (Exception ignored) {}
         }
         if (oldVersion < 4) {
@@ -154,40 +152,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             try { db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_DIFICULTAD + " TEXT NOT NULL DEFAULT 'medio'"); } catch (Exception ignored) {}
             try { db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_STATS_FK + " INTEGER"); } catch (Exception ignored) {}
 
-            // Migrar posibles km_hoy/km_semana antiguos si existían en usuarios (los copiamos a stats)
-            Cursor cur = db.rawQuery("SELECT " + COL_ID + ", " +
-                    "COALESCE((SELECT 0),0) AS dummy " + // placeholder por si no estaban las columnas antiguas
-                    " FROM " + TABLE_USUARIOS, null);
+            Cursor cur = db.rawQuery("SELECT " + COL_ID + " FROM " + TABLE_USUARIOS, null);
             try {
                 if (cur.moveToFirst()) {
                     do {
                         long uid = cur.getLong(0);
-                        // Valores antiguos si existían
-                        double kmHoy = 0, kmSem = 0;
-                        try {
-                            Cursor c2 = db.rawQuery("PRAGMA table_info(" + TABLE_USUARIOS + ")", null);
-                            boolean hasKmHoy = false, hasKmSem = false;
-                            while (c2.moveToNext()) {
-                                String name = c2.getString(1);
-                                if ("km_hoy".equals(name)) hasKmHoy = true;
-                                if ("km_semana".equals(name)) hasKmSem = true;
-                            }
-                            c2.close();
-                            if (hasKmHoy || hasKmSem) {
-                                Cursor c3 = db.rawQuery("SELECT " +
-                                                (hasKmHoy ? "km_hoy" : "0") + ", " +
-                                                (hasKmSem ? "km_semana" : "0") +
-                                                " FROM " + TABLE_USUARIOS + " WHERE " + COL_ID + "=?",
-                                        new String[]{String.valueOf(uid)});
-                                if (c3.moveToFirst()) {
-                                    kmHoy = c3.getDouble(0);
-                                    kmSem = c3.getDouble(1);
-                                }
-                                c3.close();
-                            }
-                        } catch (Exception ignored) {}
 
-                        // dificultad y nivel actuales
                         String dif = "medio";
                         int nivel = 1;
                         Cursor c4 = db.rawQuery("SELECT " + COL_DIFICULTAD + ", " + COL_NIVEL +
@@ -205,8 +175,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                         int metaS = targetFor(nivel, dif, BASE_SEMANAL);
 
                         ContentValues st = new ContentValues();
-                        st.put(COL_ST_KM_HOY, kmHoy);
-                        st.put(COL_ST_KM_SEMANA, kmSem);
+                        st.put(COL_ST_KM_HOY, 0);
+                        st.put(COL_ST_KM_SEMANA, 0);
                         st.put(COL_ST_PASOS_TOTALES, 0);
                         st.put(COL_ST_META_DIARIA, metaD);
                         st.put(COL_ST_META_SEMANAL, metaS);
@@ -224,16 +194,60 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    public long registrarUsuario(String nombre, String email, String password, String dificultad, long saldoInicial) {
+        // normalizar dificultad a valores válidos del CHECK
+        String dif = "medio";
+        if ("bajo".equalsIgnoreCase(dificultad)) dif = "bajo";
+        else if ("alto".equalsIgnoreCase(dificultad)) dif = "alto";
+
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+
+            // stats iniciales
+            int nivel = 1;
+            int metaD = targetFor(nivel, dif, BASE_DIARIA);
+            int metaS = targetFor(nivel, dif, BASE_SEMANAL);
+
+            ContentValues st = new ContentValues();
+            st.put(COL_ST_KM_HOY, 0);
+            st.put(COL_ST_KM_SEMANA, 0);
+            st.put(COL_ST_PASOS_TOTALES, 0);
+            st.put(COL_ST_META_DIARIA, metaD);
+            st.put(COL_ST_META_SEMANAL, metaS);
+            st.put(COL_ST_XP, 0);
+            long statsId = db.insert(TABLE_STATS, null, st);
+            if (statsId <= 0) return -1;
+
+            ContentValues u = new ContentValues();
+            u.put(COL_NOMBRE, nombre);
+            u.put(COL_EMAIL, email);
+            u.put(COL_PASSWORD, password);
+            u.put(COL_SALDO, Math.max(0, saldoInicial));
+            u.put(COL_NIVEL, nivel);
+            u.put(COL_DIFICULTAD, dif);
+            u.put(COL_STATS_FK, statsId);
+
+            long userId = db.insert(TABLE_USUARIOS, null, u);
+            if (userId <= 0) return -1;
+            return userId;
+
+        } catch (android.database.sqlite.SQLiteConstraintException ex) {
+            // UNIQUE(email) violado
+            return -2;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+
     // ====== Seeds ======
     private void seedUsuariosYStats(SQLiteDatabase db) {
-        // cinco usuarios con dificultad "medio"
         long u1 = insertarUsuario(db,"Martín Blanco", "martin.blanco@example.com", "1234", 500, "medio");
         long u2 = insertarUsuario(db,"Julieta Torres", "julieta.torres@example.com", "abcd", 450, "medio");
         long u3 = insertarUsuario(db,"Rodolfo Cervantes", "rodolfo.cervantes@example.com", "1111", 300, "medio");
         long u4 = insertarUsuario(db,"Lucía Fernández", "lucia.fernandez@example.com", "pass123", 700, "medio");
         long u5 = insertarUsuario(db,"Ezequiel Palleros", "ezequiel.palleros@example.com", "test", 1000,"medio");
 
-        // km iniciales de ejemplo
         setKmHoy(u1, 2.50); setKmSemana(u1, 12.70);
         setKmHoy(u2, 4.10); setKmSemana(u2, 20.30);
         setKmHoy(u3, 0.80); setKmSemana(u3, 5.00);
@@ -251,7 +265,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     // ====== Helpers de creación usuario + stats ======
-    // Crea usuario nivel 1 con dificultad dada y su fila de stats (metas según dificultad)
     private long insertarUsuario(SQLiteDatabase db, String nombre, String email, String password, long saldoInicial, String dificultad) {
         int nivel = 1;
         int metaD = targetFor(nivel, dificultad, BASE_DIARIA);
@@ -280,7 +293,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static double factor(String dificultad) {
         if ("bajo".equalsIgnoreCase(dificultad)) return 1.1;
         if ("alto".equalsIgnoreCase(dificultad)) return 1.3;
-        return 1.2; // medio (default)
+        return 1.2; // medio
     }
     private static int targetFor(int nivel, String dificultad, int base) {
         double f = factor(dificultad);
@@ -374,13 +387,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new Object[]{kmSem, userId});
     }
 
-    public void setKmHoy(long userId, double kmHoy) {
-        updateKmHoy(userId, kmHoy);
-    }
-
-    public void setKmSemana(long userId, double kmSemana) {
-        updateKmSemana(userId, kmSemana);
-    }
+    public void setKmHoy(long userId, double kmHoy) { updateKmHoy(userId, kmHoy); }
+    public void setKmSemana(long userId, double kmSemana) { updateKmSemana(userId, kmSemana); }
 
     public int[] getMetas(long userId) {
         SQLiteDatabase db = getReadableDatabase();
@@ -429,41 +437,65 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new Object[]{metaD, metaS, userId});
     }
 
-    // Subir XP y manejar level-up (100 xp por nivel). Devuelve nivel final.
+    /**
+     * Suma deltaXp al XP actual. Si alcanza o supera 100, sube de nivel,
+     * deja el resto (carry) en s.xp y recalcula las metas según dificultad y nuevo nivel.
+     * Todo atómico en una transacción.
+     */
     public int addXpAndMaybeLevelUp(long userId, int deltaXp) {
         SQLiteDatabase db = getWritableDatabase();
-        long statsId = statsIdFor(userId);
-        if (statsId <= 0) return getNivel(userId);
+        db.beginTransaction();
+        try {
+            long statsId = statsIdFor(userId);
+            if (statsId <= 0) {
+                db.setTransactionSuccessful();
+                return getNivel(userId);
+            }
 
-        Cursor c = db.rawQuery("SELECT " + COL_ST_XP + " FROM " + TABLE_STATS + " WHERE " + COL_ST_ID + "=?",
-                new String[]{String.valueOf(statsId)});
-        int xp = 0;
-        if (c.moveToFirst()) xp = c.getInt(0);
-        c.close();
+            // Leer XP actual
+            int xp = 0;
+            Cursor c = db.rawQuery("SELECT " + COL_ST_XP + " FROM " + TABLE_STATS + " WHERE " + COL_ST_ID + "=?",
+                    new String[]{String.valueOf(statsId)});
+            if (c.moveToFirst()) xp = c.getInt(0);
+            c.close();
 
-        xp += deltaXp;
-        int nivel = getNivel(userId);
-        while (xp >= XP_PER_LEVEL) {
-            xp -= XP_PER_LEVEL;
-            nivel += 1;
+            xp += deltaXp;
+
+            // Subir niveles según sea necesario
+            int nivel = getNivel(userId);
+            while (xp >= XP_PER_LEVEL) {
+                xp -= XP_PER_LEVEL; // carry del resto
+                nivel += 1;
+            }
+
+            // Guardar XP restante
+            ContentValues cvS = new ContentValues();
+            cvS.put(COL_ST_XP, xp);
+            db.update(TABLE_STATS, cvS, COL_ST_ID + "=?", new String[]{String.valueOf(statsId)});
+
+            // Guardar nivel (si cambió)
+            ContentValues cvU = new ContentValues();
+            cvU.put(COL_NIVEL, nivel);
+            db.update(TABLE_USUARIOS, cvU, COL_ID + "=?", new String[]{String.valueOf(userId)});
+
+            // Recalcular metas por nuevo nivel/dificultad
+            int metaD = targetFor(nivel, getDificultad(userId), BASE_DIARIA);
+            int metaS = targetFor(nivel, getDificultad(userId), BASE_SEMANAL);
+            db.execSQL("UPDATE " + TABLE_STATS + " SET " + COL_ST_META_DIARIA + "=?, " + COL_ST_META_SEMANAL + "=? WHERE " +
+                            COL_ST_ID + "=?",
+                    new Object[]{metaD, metaS, statsId});
+
+            db.setTransactionSuccessful();
+            return nivel;
+        } finally {
+            db.endTransaction();
         }
-
-        ContentValues cvS = new ContentValues();
-        cvS.put(COL_ST_XP, xp);
-        db.update(TABLE_STATS, cvS, COL_ST_ID + "=?", new String[]{String.valueOf(statsId)});
-
-        ContentValues cvU = new ContentValues();
-        cvU.put(COL_NIVEL, nivel);
-        db.update(TABLE_USUARIOS, cvU, COL_ID + "=?", new String[]{String.valueOf(userId)});
-
-        recalcularMetas(userId);
-        return nivel;
     }
 
     public int onDailyGoalReached(long userId)  { return addXpAndMaybeLevelUp(userId, XP_DAILY); }
     public int onWeeklyGoalReached(long userId) { return addXpAndMaybeLevelUp(userId, XP_WEEKLY); }
 
-    // ========= Cosméticos / Inventario (sin cambios de lógica) =========
+    // ========= Cosméticos / Inventario =========
     public long insertarCosmetico(SQLiteDatabase db, String nombre, String tipo, int precio, String asset) {
         ContentValues cv = new ContentValues();
         cv.put(COL_COSM_NOMBRE, nombre);

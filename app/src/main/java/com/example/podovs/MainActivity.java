@@ -23,6 +23,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvKmSemanaSmall;  // "Semana: xx.xx km"
     private ImageView ivAvatar;
 
+    // Contador de monedas
+    private TextView tvCoins;
+
     private DatabaseHelper db;
     private long userId = -1L;
 
@@ -46,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
         tvKmTotalBig    = findViewById(R.id.tvKmTotalBig);
         tvKmSemanaSmall = findViewById(R.id.tvKmSemanaSmall);
         ivAvatar        = findViewById(R.id.ivAvatar);
+        tvCoins         = findViewById(R.id.tvCoins);
 
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
@@ -58,6 +62,9 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
+
+        // Mostrar saldo inicial
+        refreshCoins();
 
         tvKmSemanaSmall.setText(String.format(Locale.getDefault(),
                 "Semana: %.2f km", db.getKmSemana(userId)));
@@ -80,12 +87,18 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopOptions).setOnClickListener(v ->
                 Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
+        // Escuchar cuando GoalsFragment actualiza las monedas
+        getSupportFragmentManager().setFragmentResultListener(
+                "coins_changed", this, (requestKey, bundle) -> refreshCoins()
+        );
+
         requestRuntimePermissions();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        refreshCoins(); // asegurar que el saldo esté al día
         if (ensureARGranted() && stepsManager != null) stepsManager.start();
     }
 
@@ -128,5 +141,12 @@ public class MainActivity extends AppCompatActivity {
         return !(Build.VERSION.SDK_INT >= 29) ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
                         == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void refreshCoins() {
+        if (tvCoins != null && userId > 0) {
+            long saldo = db.getSaldo(userId);
+            tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
+        }
     }
 }

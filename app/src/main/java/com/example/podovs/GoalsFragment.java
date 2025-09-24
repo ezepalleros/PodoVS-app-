@@ -6,7 +6,6 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -38,7 +37,6 @@ public class GoalsFragment extends DialogFragment {
     private TextView tvDailyMeta, tvDailyProgress, tvDailyCoins, tvDailyState;
     private TextView tvWeeklyMeta, tvWeeklyProgress, tvWeeklyCoins, tvWeeklyState;
     private MaterialButton btnDailyClaim, btnWeeklyClaim;
-    private ImageButton btnClose;
 
     @Override public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -49,12 +47,11 @@ public class GoalsFragment extends DialogFragment {
     }
 
     @Nullable @Override
-    public View onCreateView(@NonNull LayoutInflater inflater,
+    public View onCreateView(@NonNull android.view.LayoutInflater inflater,
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View v = inflater.inflate(R.layout.fragment_goals, container, false);
 
-        // Bind
         pbDaily = v.findViewById(R.id.pbDaily);
         pbWeekly = v.findViewById(R.id.pbWeekly);
         tvDailyMeta = v.findViewById(R.id.tvDailyMeta);
@@ -67,9 +64,10 @@ public class GoalsFragment extends DialogFragment {
         tvWeeklyState = v.findViewById(R.id.tvWeeklyState);
         btnDailyClaim = v.findViewById(R.id.btnDailyClaim);
         btnWeeklyClaim = v.findViewById(R.id.btnWeeklyClaim);
-        btnClose = v.findViewById(R.id.btnClose);
 
+        ImageButton btnClose = v.findViewById(R.id.btnClose);
         btnClose.setOnClickListener(view -> dismissAllowingStateLoss());
+
         btnDailyClaim.setOnClickListener(view -> claimDaily());
         btnWeeklyClaim.setOnClickListener(view -> claimWeekly());
 
@@ -103,8 +101,6 @@ public class GoalsFragment extends DialogFragment {
         double kmSemana = db.getKmSemana(userId);
         long stepsWeek  = Math.max(0L, Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
 
-        int nivel = db.getNivel(userId);
-
         // ---- Diario ----
         boolean claimedD = alreadyClaimedToday();
         boolean reachedD = stepsToday >= metaDaily;
@@ -114,8 +110,8 @@ public class GoalsFragment extends DialogFragment {
         pbDaily.setMax(metaDaily);
         pbDaily.setProgress((int)Math.min(stepsToday, Integer.MAX_VALUE));
 
-        long rewardDailyPreview = (nivel == 1) ? 1000L : stepsToday;
-        tvDailyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", rewardDailyPreview));
+        // Recompensa = meta vigente (base 1000 * factor por nivel/dificultad)
+        tvDailyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", metaDaily));
 
         btnDailyClaim.setEnabled(reachedD && !claimedD);
         btnDailyClaim.setAlpha(btnDailyClaim.isEnabled() ? 1f : 0.5f);
@@ -141,8 +137,7 @@ public class GoalsFragment extends DialogFragment {
         pbWeekly.setMax(metaWeekly);
         pbWeekly.setProgress((int)Math.min(stepsWeek, Integer.MAX_VALUE));
 
-        long rewardWeeklyPreview = (nivel == 1) ? 10000L : stepsWeek;
-        tvWeeklyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", rewardWeeklyPreview));
+        tvWeeklyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", metaWeekly));
 
         btnWeeklyClaim.setEnabled(reachedW && !claimedW);
         btnWeeklyClaim.setAlpha(btnWeeklyClaim.isEnabled() ? 1f : 0.5f);
@@ -162,7 +157,6 @@ public class GoalsFragment extends DialogFragment {
 
     private void claimDaily() {
         if (userId <= 0 || alreadyClaimedToday()) return;
-
         int metaDaily = db.getMetas(userId)[0];
         long stepsToday = StepsPrefs.todaySteps(requireContext());
         if (stepsToday < metaDaily) {
@@ -170,11 +164,14 @@ public class GoalsFragment extends DialogFragment {
             return;
         }
 
-        int nivel = db.getNivel(userId);
-        long coins = (nivel == 1) ? 1000L : stepsToday; // tu regla
+        long coins = metaDaily;                // recompensa = meta vigente
         db.addSaldo(userId, coins);
-        db.onDailyGoalReached(userId); // XP
+        db.onDailyGoalReached(userId);         // +10 xp con level-up y carry del resto
         markClaimedToday(coins);
+
+        // Notificar a la Activity para refrescar el contador de monedas, si lo usa
+        getParentFragmentManager().setFragmentResult("coins_changed", new Bundle());
+
         Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show();
         bindData();
     }
@@ -190,11 +187,13 @@ public class GoalsFragment extends DialogFragment {
             return;
         }
 
-        int nivel = db.getNivel(userId);
-        long coins = (nivel == 1) ? 10000L : stepsWeek; // tu regla
+        long coins = metaWeekly;               // recompensa = meta vigente
         db.addSaldo(userId, coins);
-        db.onWeeklyGoalReached(userId); // XP
+        db.onWeeklyGoalReached(userId);        // +70 xp con level-up y carry del resto
         markClaimedWeek(coins);
+
+        getParentFragmentManager().setFragmentResult("coins_changed", new Bundle());
+
         Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show();
         bindData();
     }

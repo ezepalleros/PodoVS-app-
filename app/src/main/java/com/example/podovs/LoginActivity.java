@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView; // <-- agregar
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -14,19 +15,26 @@ public class LoginActivity extends AppCompatActivity {
 
     private EditText etEmail, etPassword;
     private Button btnIngresar;
+    private TextView tvRegister; // <-- agregar
     private DatabaseHelper db; // está en el mismo paquete com.example.podovs
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_login); // tu XML con etEmail, etPassword, btnIngresar
+        setContentView(R.layout.activity_login); // tu XML con etEmail, etPassword, btnIngresar, tvRegister
 
         etEmail     = findViewById(R.id.etEmail);
         etPassword  = findViewById(R.id.etPassword);
         btnIngresar = findViewById(R.id.btnIngresar);
+        tvRegister  = findViewById(R.id.tvRegister); // <-- agregar
         db          = new DatabaseHelper(this);
 
         btnIngresar.setOnClickListener(v -> intentarLogin());
+
+        // ir al registro
+        tvRegister.setOnClickListener(v ->
+                startActivity(new Intent(LoginActivity.this, RegisterActivity.class))
+        );
     }
 
     private void intentarLogin() {

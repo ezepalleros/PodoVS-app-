@@ -19,7 +19,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PodoVS">
 
-        <!-- Login primero -->
         <activity
             android:name=".LoginActivity"
             android:exported="true">
@@ -29,9 +28,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Main luego del login -->
         <activity
             android:name=".MainActivity"
+            android:exported="false"/>
+
+        <activity
+            android:name=".RegisterActivity"
             android:exported="false"/>
     </application>
 </manifest>
