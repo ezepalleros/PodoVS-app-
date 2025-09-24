@@ -107,9 +107,8 @@ public class MainActivity extends AppCompatActivity {
         // --- Clicks de la fila superior ---
         findViewById(R.id.btnTopGoals).setOnClickListener(v -> openGoalsFragment());
         findViewById(R.id.btnTopStats).setOnClickListener(v -> openStatsFragment());
-        findViewById(R.id.btnTopProfile).setOnClickListener(v ->
-                Toast.makeText(this, "Perfil (próximamente)", Toast.LENGTH_SHORT).show());
-        findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
+        findViewById(R.id.btnTopProfile).setOnClickListener(v -> openProfileSheet()); // <-- abrir perfil
+        findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment()); // <-- abrir notifs
         findViewById(R.id.btnTopOptions).setOnClickListener(v ->
                 Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
@@ -169,6 +168,13 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
+    // Abre el panel inferior de perfil (BottomSheetDialogFragment)
+    private void openProfileSheet() {
+        ProfileFragment sheet = new ProfileFragment();
+        sheet.show(getSupportFragmentManager(), "profile_sheet");
+    }
+
+    // Abre la lista de notificaciones
     private void openNotificationsFragment() {
         getSupportFragmentManager()
                 .beginTransaction()
