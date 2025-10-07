@@ -1,5 +1,7 @@
+// app/build.gradle.kts  (correcto)
 plugins {
     alias(libs.plugins.android.application)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -8,11 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.example.podovs"
-        minSdk = 26                 // ⬅️ Health Connect requiere 26+
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -26,12 +27,8 @@ android {
         }
     }
 
-    // ⬅️ Activo ViewBinding (recomendado)
-    buildFeatures {
-        viewBinding = true
-    }
+    buildFeatures { viewBinding = true }
 
-    // ⬅️ Java 17 para usar cómodamente java.time y APIs modernas
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -44,7 +41,10 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
 
-    // Health Connect (dejé tu versión más nueva)
+    // Firebase (con BOM)
+    implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
+    implementation("com.google.firebase:firebase-analytics")
+
     implementation("androidx.health.connect:connect-client:1.2.0-alpha01")
 
     testImplementation(libs.junit)
