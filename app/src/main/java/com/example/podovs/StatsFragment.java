@@ -1,6 +1,6 @@
 package com.example.podovs;
 
-import android.database.Cursor;
+import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -12,6 +12,11 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import java.util.Locale;
 
@@ -26,8 +31,13 @@ public class StatsFragment extends Fragment {
     private TextView tvMetasDiariasOk;
     private TextView tvMetasSemanalesOk;
 
-    private DatabaseHelper db;
-    private long userId = -1L;
+    // Firestore
+    private FirestoreRepo repo;
+    private String uid = null;
+    private ListenerRegistration userListener;
+
+    // Para convertir km -> pasos si no existe el campo explícito
+    private static final double METROS_POR_PASO = 0.78;
 
     @Nullable
     @Override
@@ -58,84 +68,106 @@ public class StatsFragment extends Fragment {
         tvMetasDiariasOk       = v.findViewById(R.id.tvMetasDiariasOk);
         tvMetasSemanalesOk     = v.findViewById(R.id.tvMetasSemanalesOk);
 
-        db = new DatabaseHelper(requireContext());
-        userId = requireContext().getSharedPreferences("session", requireContext().MODE_PRIVATE)
-                .getLong("user_id", -1L);
+        uid = requireContext()
+                .getSharedPreferences("session", Context.MODE_PRIVATE)
+                .getString("uid", null);
+        repo = new FirestoreRepo();
 
-        if (userId <= 0) {
+        if (uid == null) {
             Toast.makeText(requireContext(), "Sesión inválida. Iniciá sesión nuevamente.", Toast.LENGTH_LONG).show();
             requireActivity().onBackPressed();
             return;
         }
 
-        // Escuchar eventos de actualización cuando se reclaman metas
+        // Escuchar actualizaciones en tiempo real del usuario
+        userListener = repo.listenUser(uid, userEventListener);
+
+        // Por compatibilidad con otros flujos que disparan refresh manual
         getParentFragmentManager().setFragmentResultListener(
                 "stats_refresh",
                 this,
-                (requestKey, bundle) -> loadStats()
+                (requestKey, bundle) -> repo.getUser(uid, this::bindStatsFromSnapshot,
+                        e -> Toast.makeText(requireContext(), "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show())
         );
-
-        loadStats();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // Por si volvemos desde GoalsFragment sin evento explícito
-        loadStats();
-    }
-
-    private void loadStats() {
-        String sql = "SELECT " +
-                "s." + DatabaseHelper.COL_ST_PASOS_TOTALES + ", " +
-                "s." + DatabaseHelper.COL_ST_KM_TOTAL + ", " +
-                "s." + DatabaseHelper.COL_ST_CARRERAS_GANADAS + ", " +
-                "s." + DatabaseHelper.COL_ST_OBJ_COMPRADOS + ", " +
-                "s." + DatabaseHelper.COL_ST_EVENTOS_PART + ", " +
-                "s." + DatabaseHelper.COL_ST_MEJOR_POS_MENSUAL + ", " +
-                "s." + DatabaseHelper.COL_ST_METAS_DIARIAS_OK + ", " +
-                "s." + DatabaseHelper.COL_ST_METAS_SEMANALES_OK +
-                " FROM " + DatabaseHelper.TABLE_USUARIOS + " u " +
-                "JOIN " + DatabaseHelper.TABLE_STATS + " s ON s." + DatabaseHelper.COL_ST_ID + " = u." + DatabaseHelper.COL_STATS_FK + " " +
-                "WHERE u." + DatabaseHelper.COL_ID + "=? LIMIT 1";
-
-        Cursor c = db.getReadableDatabase().rawQuery(sql, new String[]{String.valueOf(userId)});
-        try {
-            if (c.moveToFirst()) {
-                int pasosTotales        = safeGetInt(c, 0);
-                double kmTotales        = safeGetDouble(c, 1);
-                int carrerasGanadas     = safeGetInt(c, 2);
-                int objetosComprados    = safeGetInt(c, 3);
-                int eventosParticipados = safeGetInt(c, 4);
-                Integer mejorPosMensual = safeGetNullableInt(c, 5);
-                int metasDiariasOk      = safeGetInt(c, 6);
-                int metasSemanalesOk    = safeGetInt(c, 7);
-
-                tvPasosTotales.setText(String.format(Locale.getDefault(), "%,d", pasosTotales));
-                tvKmTotales.setText(String.format(Locale.getDefault(), "%.2f km", kmTotales));
-                tvCarrerasGanadas.setText(String.valueOf(carrerasGanadas));
-                tvObjetosComprados.setText(String.valueOf(objetosComprados));
-                tvEventosParticipados.setText(String.valueOf(eventosParticipados));
-                tvMejorPosicionMensual.setText(mejorPosMensual == null ? "-" : String.valueOf(mejorPosMensual));
-                tvMetasDiariasOk.setText(String.valueOf(metasDiariasOk));
-                tvMetasSemanalesOk.setText(String.valueOf(metasSemanalesOk));
-            } else {
-                Toast.makeText(requireContext(), "No se encontraron estadísticas.", Toast.LENGTH_LONG).show();
-            }
-        } finally {
-            c.close();
+        // Forzar una lectura única para inicializar rápido (por si el listener tarda en llegar)
+        if (uid != null) {
+            repo.getUser(uid, this::bindStatsFromSnapshot,
+                    e -> { /* no-op */ });
         }
     }
 
-    private int safeGetInt(Cursor c, int idx) {
-        return c.isNull(idx) ? 0 : c.getInt(idx);
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (userListener != null) {
+            userListener.remove();
+            userListener = null;
+        }
     }
 
-    private double safeGetDouble(Cursor c, int idx) {
-        return c.isNull(idx) ? 0.0 : c.getDouble(idx);
+    // --- Listener de Firestore ---
+    private final EventListener<DocumentSnapshot> userEventListener = (snap, err) -> {
+        if (!isAdded()) return;
+        if (err != null) return;
+        if (snap == null || !snap.exists()) return;
+        bindStatsFromSnapshot(snap);
+    };
+
+    // --- Vincular datos a la UI ---
+    private void bindStatsFromSnapshot(DocumentSnapshot snap) {
+        if (!isAdded()) return;
+
+        // km totales
+        double kmTotales = getDouble(snap, "usu_stats.km_total", 0.0);
+        tvKmTotales.setText(String.format(Locale.getDefault(), "%.2f km", kmTotales));
+
+        // pasos totales (si no existe campo, lo derivamos de km_total)
+        long pasosTotales = getLong(snap, "usu_stats.pasos_totales",
+                Math.max(0L, Math.round((kmTotales * 1000.0) / METROS_POR_PASO)));
+        tvPasosTotales.setText(String.format(Locale.getDefault(), "%,d", pasosTotales));
+
+        // objetos comprados
+        long objetosComprados = getLong(snap, "usu_stats.objetos_comprados", 0L);
+        tvObjetosComprados.setText(String.valueOf(objetosComprados));
+
+        // metas cumplidas
+        long metasDiariasOk = getLong(snap, "usu_stats.metas_diarias_cumplidas", 0L);
+        long metasSemanalesOk = getLong(snap, "usu_stats.metas_semanales_cumplidas", 0L);
+        tvMetasDiariasOk.setText(String.valueOf(metasDiariasOk));
+        tvMetasSemanalesOk.setText(String.valueOf(metasSemanalesOk));
+
+        // carreras ganadas (si no lo tenés aún en Firestore, quedará 0)
+        long carrerasGanadas = getLong(snap, "usu_stats.carreras_ganadas", 0L);
+        tvCarrerasGanadas.setText(String.valueOf(carrerasGanadas));
+
+        // eventos participados (igual que arriba: default 0)
+        long eventosParticipados = getLong(snap, "usu_stats.eventos_participados", 0L);
+        tvEventosParticipados.setText(String.valueOf(eventosParticipados));
+
+        // mejor posición mensual (nullable)
+        Long mejorPos = getLongNullable(snap, "usu_stats.mejor_pos_mensual");
+        tvMejorPosicionMensual.setText(mejorPos == null ? "-" : String.valueOf(mejorPos));
     }
 
-    private Integer safeGetNullableInt(Cursor c, int idx) {
-        return c.isNull(idx) ? null : c.getInt(idx);
+    // --- Helpers para leer del snapshot ---
+    private long getLong(DocumentSnapshot s, String path, long def) {
+        Object v = s.get(path);
+        return (v instanceof Number) ? ((Number) v).longValue() : def;
+    }
+
+    @Nullable
+    private Long getLongNullable(DocumentSnapshot s, String path) {
+        Object v = s.get(path);
+        return (v instanceof Number) ? ((Number) v).longValue() : null;
+    }
+
+    private double getDouble(DocumentSnapshot s, String path, double def) {
+        Object v = s.get(path);
+        return (v instanceof Number) ? ((Number) v).doubleValue() : def;
     }
 }

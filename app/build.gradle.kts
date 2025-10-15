@@ -1,4 +1,3 @@
-// app/build.gradle.kts  (correcto)
 plugins {
     alias(libs.plugins.android.application)
     id("com.google.gms.google-services")
@@ -7,7 +6,6 @@ plugins {
 android {
     namespace = "com.example.podovs"
     compileSdk = 36
-
     defaultConfig {
         applicationId = "com.example.podovs"
         minSdk = 26
@@ -16,7 +14,6 @@ android {
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -26,9 +23,7 @@ android {
             )
         }
     }
-
     buildFeatures { viewBinding = true }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -41,11 +36,15 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
 
-    // Firebase (con BOM)
+    // BoM de Firebase (usa UNA sola versión para todo)
     implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
-    implementation("com.google.firebase:firebase-analytics")
 
-    implementation("androidx.health.connect:connect-client:1.2.0-alpha01")
+    // Necesarios para tu FirestoreRepo.java
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+
+    // (Opcional) Analytics si lo usas
+    implementation("com.google.firebase:firebase-analytics")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

@@ -16,7 +16,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** Maneja conteo de pasos en foreground + persistencia diaria + update de BDD. */
+/** Maneja conteo de pasos en foreground + persistencia diaria local + callback de UI.
+ *  Toda persistencia remota (Firestore, etc.) debe hacerse en quien instancie, usando el callback. */
 public class StepsManager {
 
     public interface Callback {
@@ -30,8 +31,6 @@ public class StepsManager {
     private static final double METROS_POR_PASO = 0.78;
 
     private final Context appCtx;
-    private final DatabaseHelper db;
-    private final long userId;
     private final Callback callback;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -46,12 +45,11 @@ public class StepsManager {
     private float baseOffset = -1f;
     private long stepsToday = 0L;
 
-    private ScheduledExecutorService dbScheduler;
+    private ScheduledExecutorService tickScheduler;
 
-    public StepsManager(Context context, DatabaseHelper db, long userId, Callback callback) {
+    /** Constructor recomendado (sin BDD). */
+    public StepsManager(Context context, Callback callback) {
         this.appCtx = context.getApplicationContext();
-        this.db = db;
-        this.userId = userId;
         this.callback = callback;
 
         sensorManager = (SensorManager) appCtx.getSystemService(Context.SENSOR_SERVICE);
@@ -64,6 +62,11 @@ public class StepsManager {
         SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
         baseOffset = prefs.getFloat(keyBaseToday, -1f);
         stepsToday = prefs.getLong(keyTotalToday, 0L);
+    }
+
+    /** Constructor legacy para compatibilidad con llamadas existentes: ignora db/userId. */
+    public StepsManager(Context context, /*@Nullable*/ Object ignoredDb, long ignoredUserId, Callback callback) {
+        this(context, callback);
     }
 
     /** Idempotente: si ya está escuchando, no hace nada. */
@@ -83,20 +86,10 @@ public class StepsManager {
         }
         listening = true;
 
-        // Guardado en BDD cada 3 s (ahora usando stats)
-        if (dbScheduler == null || dbScheduler.isShutdown()) {
-            dbScheduler = Executors.newSingleThreadScheduledExecutor();
-            dbScheduler.scheduleAtFixedRate(() -> {
-                long s = stepsToday;
-                double km = round2(s * METROS_POR_PASO / 1000.0);
-
-                if (userId > 0) {
-                    // >>> cambio principal: escribir en 'estadisticas' vía helper
-                    db.updateKmHoy(userId, km);
-                }
-
-                mainHandler.post(() -> callback.onStepsUpdated(s, km));
-            }, 0, 3, TimeUnit.SECONDS);
+        // “Tick” suave cada 3 s para refrescar UI aunque no haya eventos del sensor.
+        if (tickScheduler == null || tickScheduler.isShutdown()) {
+            tickScheduler = Executors.newSingleThreadScheduledExecutor();
+            tickScheduler.scheduleAtFixedRate(() -> emitUpdate(), 0, 3, TimeUnit.SECONDS);
         }
 
         emitUpdate();
@@ -108,7 +101,7 @@ public class StepsManager {
             try { sensorManager.unregisterListener(listener); } catch (Exception ignore) {}
             listening = false;
         }
-        if (dbScheduler != null) { dbScheduler.shutdownNow(); dbScheduler = null; }
+        if (tickScheduler != null) { tickScheduler.shutdownNow(); tickScheduler = null; }
     }
 
     public long getStepsToday() { return stepsToday; }
@@ -147,7 +140,9 @@ public class StepsManager {
     private void emitUpdate() {
         final long s = stepsToday;
         final double km = round2(s * METROS_POR_PASO / 1000.0);
-        mainHandler.post(() -> callback.onStepsUpdated(s, km));
+        mainHandler.post(() -> {
+            if (callback != null) callback.onStepsUpdated(s, km);
+        });
     }
 
     private String todayKey(String prefix) {
@@ -156,14 +151,17 @@ public class StepsManager {
     }
 
     private void ensureTodayKeys() {
-        String expected = todayKey(KEY_BASE_PREFIX);
-        if (!expected.equals(keyBaseToday)) {
-            keyBaseToday  = expected;
+        String expectedBase = todayKey(KEY_BASE_PREFIX);
+        if (!expectedBase.equals(keyBaseToday)) {
+            // Cambió el día: reseteamos claves y valores locales
+            keyBaseToday  = expectedBase;
             keyTotalToday = todayKey(KEY_TOTAL_PREFIX);
             baseOffset = -1f;
             stepsToday = 0L;
             appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).edit()
-                    .remove(keyTotalToday).apply();
+                    .remove(keyTotalToday)   // limpiar total del nuevo día (por si existía)
+                    .remove(expectedBase)    // asegurar recalibración del baseOffset
+                    .apply();
         }
     }
 

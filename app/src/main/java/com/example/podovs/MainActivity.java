@@ -13,8 +13,11 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+
+import com.google.firebase.firestore.DocumentSnapshot;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -32,24 +35,27 @@ public class MainActivity extends AppCompatActivity {
     // Contador de monedas
     private TextView tvCoins;
 
-    private DatabaseHelper db;
-    private long userId = -1L;
+    // >>> Firestore <<<
+    private FirestoreRepo repo;
+    private String uid = null;
 
+    // >>> Steps <<<
     private StepsManager stepsManager;
 
-    // ---- Rollover diario/semana ----
+    // ---- Rollover diario/semana (cache local de pasos) ----
     private static final double STEP_TO_KM = 0.0008; // 1 paso ~ 0.8 m
     private static final String PREFS = "podovs_prefs";
     private static final String KEY_PASOS_HOY = "pasos_hoy"; // guardado como LONG
     private static final String KEY_ULTIMO_DIA = "ultimo_dia";
     private static final String KEY_DIAS_CONTADOS = "dias_contados";
 
+    // cache leída desde Firestore (para evitar lecturas extra en cada rollover)
+    private double kmSemanaCache = 0.0;
+
     private final ActivityResultLauncher<String[]> permsLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
                 boolean arGranted = result.getOrDefault(Manifest.permission.ACTIVITY_RECOGNITION, false)
-                        || Build.VERSION.SDK_INT < 29; // en <29 no existe
-                // POST_NOTIFICATIONS podría estar o no concedido; NotificationHelper ya lo chequea internamente.
-
+                        || Build.VERSION.SDK_INT < 29;
                 if (arGranted) {
                     secureStartSteps();
                 } else {
@@ -66,18 +72,19 @@ public class MainActivity extends AppCompatActivity {
         tvKmSemanaSmall = findViewById(R.id.tvKmSemanaSmall);
         ivAvatar        = findViewById(R.id.ivAvatar);
         tvCoins         = findViewById(R.id.tvCoins);
-
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
-        db = new DatabaseHelper(this);
-
+        // ==== Sesión Firebase ====
         SharedPreferences spSession = getSharedPreferences("session", MODE_PRIVATE);
-        userId = spSession.getLong("user_id", -1L);
-        if (userId <= 0) {
+        uid = spSession.getString("uid", null);
+        if (uid == null || uid.isEmpty()) {
             startActivity(new Intent(this, LoginActivity.class));
             finish();
             return;
         }
+
+        // ==== Repo Firestore ====
+        repo = new FirestoreRepo();
 
         // Inicializa clave de fecha si viene vacía
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
@@ -85,40 +92,65 @@ public class MainActivity extends AppCompatActivity {
             sp.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
         }
 
-        // Mostrar saldo inicial
-        refreshCoins();
+        // Listener del documento del usuario (saldo, km semana, etc.)
+        repo.listenUser(uid, (snap, err) -> {
+            if (err != null) {
+                Log.w(TAG, "listenUser error: " + err.getMessage());
+                return;
+            }
+            if (snap != null && snap.exists()) {
+                // saldo
+                Long saldo = snap.getLong("usu_saldo");
+                if (saldo != null && tvCoins != null) {
+                    tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
+                }
+                // km semana
+                Double kmSemana = getNestedDouble(snap, "usu_stats.km_semana");
+                if (kmSemana != null) {
+                    kmSemanaCache = kmSemana;
+                    tvKmSemanaSmall.setText(
+                            String.format(Locale.getDefault(), "Semana: %.2f km", kmSemanaCache)
+                    );
+                }
+            }
+        });
 
-        tvKmSemanaSmall.setText(String.format(Locale.getDefault(),
-                "Semana: %.2f km", db.getKmSemana(userId)));
-        // Mostramos los pasos almacenados (si los hay) al entrar
+        // Mostrar pasos guardados (persistidos en prefs por el steps callback)
         long pasosGuardados = sp.getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosGuardados));
 
-        stepsManager = new StepsManager(this, db, userId, (stepsToday, kmHoy) -> {
-            // Guardamos pasos del día para poder hacer el rollover aunque la app se pause
+        // StepsManager: NO persistimos en SQLite. Solo usamos el callback para:
+        // 1) guardar pasos del día localmente (para el rollover),
+        // 2) subir km del día a Firestore.
+        stepsManager = new StepsManager(this, /*db=*/null, /*userId=*/0L, (stepsToday, kmHoy) -> {
             SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
             prefs.edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
 
             tvKmTotalBig.setText(String.valueOf(stepsToday));
-            tvKmSemanaSmall.setText(String.format(Locale.getDefault(),
-                    "Semana: %.2f km", db.getKmSemana(userId)));
+
+            // Persistir km del día en Firestore
+            if (uid != null) {
+                repo.setKmHoy(uid, kmHoy,
+                        v -> { /* ok */ },
+                        e -> Log.w(TAG, "setKmHoy error: " + e.getMessage()));
+            }
         });
 
         // --- Clicks de la fila superior ---
         findViewById(R.id.btnTopGoals).setOnClickListener(v -> openGoalsFragment());
         findViewById(R.id.btnTopStats).setOnClickListener(v -> openStatsFragment());
-        findViewById(R.id.btnTopProfile).setOnClickListener(v -> openProfileSheet()); // <-- abrir perfil
-        findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment()); // <-- abrir notifs
+        findViewById(R.id.btnTopProfile).setOnClickListener(v -> openProfileSheet());
+        findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
         findViewById(R.id.btnTopOptions).setOnClickListener(v ->
                 Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
-        // Escuchar cuando GoalsFragment actualiza las monedas
+        // Si algún fragmento cambió monedas, Firestore nos actualizará por listener.
         getSupportFragmentManager().setFragmentResultListener(
-                "coins_changed", this, (requestKey, bundle) -> refreshCoins()
+                "coins_changed", this, (requestKey, bundle) -> { /* no-op: listener ya refresca */ }
         );
 
         requestRuntimePermissions();
-        // Hacer rollover si cambió la fecha antes de mostrar datos
+        // Hacer rollover si cambió la fecha antes de mostrar
         maybeRunRollover();
         // Refrescar UI luego del posible rollover
         updateSmallWeekAndBigStepsFromStorage();
@@ -127,10 +159,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        refreshCoins(); // asegurar que el saldo esté al día
-        maybeRunRollover(); // por si cambiamos de día mientras la app estaba en background
+        // listener ya mantiene saldo y km semana
+        maybeRunRollover();
         updateSmallWeekAndBigStepsFromStorage();
-
         secureStartSteps();
     }
 
@@ -168,13 +199,11 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
-    // Abre el panel inferior de perfil (BottomSheetDialogFragment)
     private void openProfileSheet() {
         ProfileFragment sheet = new ProfileFragment();
         sheet.show(getSupportFragmentManager(), "profile_sheet");
     }
 
-    // Abre la lista de notificaciones
     private void openNotificationsFragment() {
         getSupportFragmentManager()
                 .beginTransaction()
@@ -221,7 +250,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             stepsManager.start();
         } catch (SecurityException se) {
-            Log.w(TAG, "SecurityException al iniciar StepsManager (permiso revocado?): " + se.getMessage());
+            Log.w(TAG, "SecurityException al iniciar StepsManager: " + se.getMessage());
         }
     }
 
@@ -234,13 +263,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void refreshCoins() {
-        if (tvCoins != null && userId > 0) {
-            long saldo = db.getSaldo(userId);
-            tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
-        }
-    }
-
     // ==== Helpers de rollover y UI ====
 
     private String todayString() {
@@ -248,37 +270,62 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void maybeRunRollover() {
+        if (uid == null) return;
+
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
         String last = sp.getString(KEY_ULTIMO_DIA, "");
         String today = todayString();
 
-        if (today.equals(last)) return; // mismo día, nada que hacer
+        if (today.equals(last)) return; // mismo día
 
         long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
         double kmAgregar = pasosHoy * STEP_TO_KM;
 
-        double kmSem = db.getKmSemana(userId);
-        db.setKmSemana(userId, kmSem + kmAgregar);  // acumula al semanal
-        db.setKmHoy(userId, 0);                     // limpia km del día
+        // Suma al semanal y limpia el día en Firestore usando el cache local
+        double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
+
+        repo.setKmSemana(uid, nuevoSem,
+                v -> { /* ok */ },
+                e -> Log.w(TAG, "setKmSemana error: " + e.getMessage()));
+
+        repo.setKmHoy(uid, 0.0,
+                v -> { /* ok */ },
+                e -> Log.w(TAG, "setKmHoy(0) error: " + e.getMessage()));
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
         if (diasContados >= 7) {
-            db.setKmSemana(userId, 0);              // resetea semana
+            // Reinicia semana en Firestore y cache
+            repo.setKmSemana(uid, 0.0,
+                    v -> { /* ok */ },
+                    e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
+            kmSemanaCache = 0.0;
             diasContados = 0;
         }
 
         sp.edit()
                 .putString(KEY_ULTIMO_DIA, today)
-                .putLong(KEY_PASOS_HOY, 0L)              // resetea pasos del día (LONG)
+                .putLong(KEY_PASOS_HOY, 0L)
                 .putInt(KEY_DIAS_CONTADOS, diasContados)
                 .apply();
+
+        // Refrescar UI local
+        tvKmTotalBig.setText(String.valueOf(0));
+        tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", nuevoSem));
+        kmSemanaCache = nuevoSem;
     }
 
     private void updateSmallWeekAndBigStepsFromStorage() {
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
         long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosHoy));
-        tvKmSemanaSmall.setText(String.format(Locale.getDefault(),
-                "Semana: %.2f km", db.getKmSemana(userId)));
+        tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", kmSemanaCache));
+    }
+
+    @Nullable
+    private Double getNestedDouble(DocumentSnapshot snap, String dottedPath) {
+        // Firestore permite maps; accedemos por claves
+        Object val = snap.get(dottedPath);
+        if (val instanceof Number) return ((Number) val).doubleValue();
+        return null;
     }
 }

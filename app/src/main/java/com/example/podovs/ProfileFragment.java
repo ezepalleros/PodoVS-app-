@@ -2,7 +2,6 @@ package com.example.podovs;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -17,6 +16,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.google.firebase.firestore.DocumentSnapshot;
 
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -36,28 +36,27 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     private TextView tvStat2Title, tvStat2Value;
     private ImageButton btnEdit2;
 
-    // Data
-    private DatabaseHelper db;
-    private long userId = -1L;
+    // Repo / sesión
+    private FirestoreRepo repo;
+    private String uid = null;
 
     // Config
     private static final String PREFS_PROFILE = "profile_prefs";
     private static final String KEY_SLOT1 = "slot1_key";
     private static final String KEY_SLOT2 = "slot2_key";
-    private static final int XP_PER_LEVEL = 100; // debe coincidir con DatabaseHelper
+    private static final int XP_PER_LEVEL_BASE = 100; // debe coincidir con FirestoreRepo (100 * nivel)
 
-    // Conjunto de métricas disponibles (clave -> título en UI)
-    // Las claves se usan para guardar preferencia de qué mostrar.
+    // Conjunto de métricas disponibles (clave Firestore -> título en UI)
+    // Claves son paths de Firestore dentro del doc users/{uid}
     private static final LinkedHashMap<String, String> METRIC_TITLES = new LinkedHashMap<>();
     static {
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_KM_TOTAL, "Km recorridos");
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_CARRERAS_GANADAS, "Carreras ganadas");
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_OBJ_COMPRADOS, "Objetos comprados");
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_EVENTOS_PART, "Eventos participados");
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_MEJOR_POS_MENSUAL, "Mejor posición mensual");
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_METAS_DIARIAS_OK, "Metas diarias OK");
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_METAS_SEMANALES_OK, "Metas semanales OK");
-        METRIC_TITLES.put(DatabaseHelper.COL_ST_PASOS_TOTALES, "Pasos totales");
+        METRIC_TITLES.put("usu_stats.km_total", "Km recorridos");
+        METRIC_TITLES.put("usu_stats.objetos_comprados", "Objetos comprados");
+        METRIC_TITLES.put("usu_stats.metas_diarias_cumplidas", "Metas diarias OK");
+        METRIC_TITLES.put("usu_stats.metas_semanales_cumplidas", "Metas semanales OK");
+        METRIC_TITLES.put("usu_stats.km_semana", "Km esta semana");
+        METRIC_TITLES.put("usu_stats.km_hoy", "Km hoy");
+        // Podés agregar más cuando existan en Firestore (p. ej., carreras, eventos, etc.)
     }
 
     public ProfileFragment() {}
@@ -94,69 +93,60 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
-        db = new DatabaseHelper(requireContext());
-        userId = requireContext().getSharedPreferences("session", Context.MODE_PRIVATE)
-                .getLong("user_id", -1L);
+        uid = requireContext()
+                .getSharedPreferences("session", Context.MODE_PRIVATE)
+                .getString("uid", null);
+        repo = new FirestoreRepo();
 
-        // Cargar nombre/level/xp
-        loadHeader();
-
-        // Cargar y mostrar dos tarjetas configurables
-        refreshStatCards();
+        // Cargar header y tarjetas
+        loadHeaderAndCards();
 
         // Editar qué métrica se muestra en cada tarjeta
         btnEdit1.setOnClickListener(view -> showPickerForSlot(1));
         btnEdit2.setOnClickListener(view -> showPickerForSlot(2));
     }
 
-    // ---------- Header (nombre, nivel, XP) ----------
-    private void loadHeader() {
-        // nombre + nivel
-        Cursor cu = db.getReadableDatabase().rawQuery(
-                "SELECT " + DatabaseHelper.COL_NOMBRE + ", " + DatabaseHelper.COL_NIVEL +
-                        " FROM " + DatabaseHelper.TABLE_USUARIOS + " WHERE " + DatabaseHelper.COL_ID + "=? LIMIT 1",
-                new String[]{ String.valueOf(userId) }
-        );
-        String nombre = "-";
-        int nivel = 1;
-        try {
-            if (cu.moveToFirst()) {
-                nombre = cu.isNull(0) ? "-" : cu.getString(0);
-                nivel = cu.isNull(1) ? 1 : cu.getInt(1);
-            }
-        } finally { cu.close(); }
+    // ---------- Header (nombre, nivel, XP) + Tarjetas ----------
+    private void loadHeaderAndCards() {
+        if (uid == null) return;
 
-        tvName.setText(nombre);
-        tvLevel.setText(String.format(Locale.getDefault(), "Nivel %d", nivel));
+        repo.getUser(uid, (DocumentSnapshot snap) -> {
+            if (snap == null || !snap.exists() || !isAdded()) return;
 
-        // XP actual
-        Cursor cxp = db.getReadableDatabase().rawQuery(
-                "SELECT s." + DatabaseHelper.COL_ST_XP +
-                        " FROM " + DatabaseHelper.TABLE_USUARIOS + " u " +
-                        "JOIN " + DatabaseHelper.TABLE_STATS + " s ON s." + DatabaseHelper.COL_ST_ID + " = u." + DatabaseHelper.COL_STATS_FK + " " +
-                        "WHERE u." + DatabaseHelper.COL_ID + "=? LIMIT 1",
-                new String[]{ String.valueOf(userId) }
-        );
-        int xp = 0;
-        try {
-            if (cxp.moveToFirst()) xp = cxp.isNull(0) ? 0 : cxp.getInt(0);
-        } finally { cxp.close(); }
+            // Nombre y nivel
+            String nombre = snap.getString("usu_nombre");
+            int nivel = safeInt(snap.getLong("usu_nivel"), 1);
 
-        pbXp.setMax(XP_PER_LEVEL);
-        pbXp.setProgress(Math.max(0, Math.min(xp, XP_PER_LEVEL)));
-        tvXpHint.setText(String.format(Locale.getDefault(), "%d / %d XP", xp, XP_PER_LEVEL));
+            tvName.setText(nombre != null ? nombre : "-");
+            tvLevel.setText(String.format(Locale.getDefault(), "Nivel %d", nivel));
+
+            // XP y barra
+            long xp = getNestedLong(snap, "usu_stats.xp", 0L);
+            int maxForLevel = XP_PER_LEVEL_BASE * Math.max(1, nivel);
+            pbXp.setMax(maxForLevel);
+            pbXp.setProgress((int) Math.max(0, Math.min(xp, maxForLevel)));
+            tvXpHint.setText(String.format(Locale.getDefault(), "%d / %d XP", xp, maxForLevel));
+
+            // Tarjetas
+            refreshStatCardsWithSnapshot(snap);
+
+        }, e -> {
+            // Podés loguear o mostrar un toast si querés
+        });
     }
 
-    // ---------- Tarjetas configurables ----------
-    private void refreshStatCards() {
+    private void refreshStatCardsWithSnapshot(DocumentSnapshot snap) {
         SharedPreferences sp = requireContext().getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
-        String k1 = sp.getString(KEY_SLOT1, DatabaseHelper.COL_ST_KM_TOTAL);
-        String k2 = sp.getString(KEY_SLOT2, DatabaseHelper.COL_ST_CARRERAS_GANADAS);
+        String default1 = "usu_stats.km_total";
+        String default2 = "usu_stats.objetos_comprados";
+
+        String k1 = sp.getString(KEY_SLOT1, default1);
+        String k2 = sp.getString(KEY_SLOT2, default2);
 
         // Evitar que ambas tarjetas muestren lo mismo en el primer inicio
-        if (TextUtils.equals(k1, k2)) k2 = DatabaseHelper.COL_ST_CARRERAS_GANADAS;
+        if (TextUtils.equals(k1, k2)) k2 = default2;
 
-        Map<String, Object> values = readAllMetrics();
+        Map<String, Object> values = readAllMetricsFromSnapshot(snap);
 
         tvStat1Title.setText(titleFor(k1));
         tvStat1Value.setText(formatValue(k1, values.get(k1)));
@@ -165,34 +155,22 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         tvStat2Value.setText(formatValue(k2, values.get(k2)));
     }
 
-    private Map<String, Object> readAllMetrics() {
+    // Lee del snapshot todas las métricas que soportamos
+    private Map<String, Object> readAllMetricsFromSnapshot(DocumentSnapshot snap) {
         LinkedHashMap<String, Object> map = new LinkedHashMap<>();
-        String sql = "SELECT " +
-                "s." + DatabaseHelper.COL_ST_KM_TOTAL + "," +
-                "s." + DatabaseHelper.COL_ST_CARRERAS_GANADAS + "," +
-                "s." + DatabaseHelper.COL_ST_OBJ_COMPRADOS + "," +
-                "s." + DatabaseHelper.COL_ST_EVENTOS_PART + "," +
-                "s." + DatabaseHelper.COL_ST_MEJOR_POS_MENSUAL + "," +
-                "s." + DatabaseHelper.COL_ST_METAS_DIARIAS_OK + "," +
-                "s." + DatabaseHelper.COL_ST_METAS_SEMANALES_OK + "," +
-                "s." + DatabaseHelper.COL_ST_PASOS_TOTALES +
-                " FROM " + DatabaseHelper.TABLE_USUARIOS + " u " +
-                "JOIN " + DatabaseHelper.TABLE_STATS + " s ON s." + DatabaseHelper.COL_ST_ID + " = u." + DatabaseHelper.COL_STATS_FK + " " +
-                "WHERE u." + DatabaseHelper.COL_ID + "=? LIMIT 1";
-
-        Cursor c = db.getReadableDatabase().rawQuery(sql, new String[]{ String.valueOf(userId) });
-        try {
-            if (c.moveToFirst()) {
-                map.put(DatabaseHelper.COL_ST_KM_TOTAL, c.isNull(0) ? 0d : c.getDouble(0));
-                map.put(DatabaseHelper.COL_ST_CARRERAS_GANADAS, c.isNull(1) ? 0 : c.getInt(1));
-                map.put(DatabaseHelper.COL_ST_OBJ_COMPRADOS, c.isNull(2) ? 0 : c.getInt(2));
-                map.put(DatabaseHelper.COL_ST_EVENTOS_PART, c.isNull(3) ? 0 : c.getInt(3));
-                map.put(DatabaseHelper.COL_ST_MEJOR_POS_MENSUAL, c.isNull(4) ? null : c.getInt(4));
-                map.put(DatabaseHelper.COL_ST_METAS_DIARIAS_OK, c.isNull(5) ? 0 : c.getInt(5));
-                map.put(DatabaseHelper.COL_ST_METAS_SEMANALES_OK, c.isNull(6) ? 0 : c.getInt(6));
-                map.put(DatabaseHelper.COL_ST_PASOS_TOTALES, c.isNull(7) ? 0 : c.getInt(7));
+        for (String key : METRIC_TITLES.keySet()) {
+            Object v = snap.get(key);
+            if (v == null) {
+                // defaults razonables
+                if (key.endsWith("km_total") || key.endsWith("km_semana") || key.endsWith("km_hoy")) {
+                    map.put(key, 0.0);
+                } else {
+                    map.put(key, 0L);
+                }
+            } else {
+                map.put(key, v);
             }
-        } finally { c.close(); }
+        }
         return map;
     }
 
@@ -202,16 +180,12 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     }
 
     private String formatValue(String key, Object value) {
-        if (key.equals(DatabaseHelper.COL_ST_KM_TOTAL)) {
-            double km = value instanceof Number ? ((Number) value).doubleValue() : 0d;
+        if (key.endsWith("km_total") || key.endsWith("km_semana") || key.endsWith("km_hoy")) {
+            double km = (value instanceof Number) ? ((Number) value).doubleValue() : 0d;
             return String.format(Locale.getDefault(), "%.2f", km);
         }
-        if (key.equals(DatabaseHelper.COL_ST_MEJOR_POS_MENSUAL)) {
-            if (value == null) return "-";
-            return String.valueOf(((Number) value).intValue());
-        }
-        // restantes: números enteros
-        int v = (value instanceof Number) ? ((Number) value).intValue() : 0;
+        // restantes: enteros
+        long v = (value instanceof Number) ? ((Number) value).longValue() : 0L;
         return String.format(Locale.getDefault(), "%,d", v);
     }
 
@@ -229,8 +203,16 @@ public class ProfileFragment extends BottomSheetDialogFragment {
                     } else {
                         sp.edit().putString(KEY_SLOT2, chosenKey).apply();
                     }
-                    refreshStatCards();
+                    // Recargar solo las tarjetas (con los últimos datos)
+                    loadHeaderAndCards();
                 })
                 .show();
+    }
+
+    // --------- Helpers ---------
+    private int safeInt(Long v, int def) { return (v == null) ? def : v.intValue(); }
+    private long getNestedLong(DocumentSnapshot s, String path, long def) {
+        Object v = s.get(path);
+        return (v instanceof Number) ? ((Number) v).longValue() : def;
     }
 }

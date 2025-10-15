@@ -19,6 +19,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.firestore.DocumentSnapshot;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -29,8 +30,9 @@ public class GoalsFragment extends DialogFragment {
     private static final String SP_CLAIM = "goals_claim";
     private static final double METROS_POR_PASO = 0.78;
 
-    private DatabaseHelper db;
-    private long userId;
+    // Firestore
+    private FirestoreRepo repo;
+    private String uid;
 
     // Views
     private ProgressBar pbDaily, pbWeekly;
@@ -41,9 +43,9 @@ public class GoalsFragment extends DialogFragment {
     @Override public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setStyle(STYLE_NO_FRAME, android.R.style.Theme_Translucent_NoTitleBar);
-        db = new DatabaseHelper(requireContext());
+        repo = new FirestoreRepo();
         SharedPreferences sp = requireActivity().getSharedPreferences("session", Context.MODE_PRIVATE);
-        userId = sp.getLong("user_id", -1L);
+        uid = sp.getString("uid", null);
     }
 
     @Nullable @Override
@@ -89,113 +91,148 @@ public class GoalsFragment extends DialogFragment {
 
     // -------------------- Datos y UI --------------------
     private void bindData() {
-        if (userId <= 0) return;
+        if (uid == null || !isAdded()) return;
 
-        // Metas persistidas en SQLite (estadisticas)
-        int[] metas = db.getMetas(userId);
-        int metaDaily  = metas[0];
-        int metaWeekly = metas[1];
+        repo.getUser(uid, (DocumentSnapshot snap) -> {
+            if (snap == null || !snap.exists()) return;
 
-        // Progreso actual
-        long stepsToday = StepsPrefs.todaySteps(requireContext());
-        double kmSemana = db.getKmSemana(userId);
-        long stepsWeek  = Math.max(0L, Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
+            // Metas desde Firestore
+            long metaDaily  = getNestedLong(snap, "usu_stats.meta_diaria_pasos", 8000L);
+            long metaWeekly = getNestedLong(snap, "usu_stats.meta_semanal_pasos", 56000L);
 
-        // ---- Diario ----
-        boolean claimedD = alreadyClaimedToday();
-        boolean reachedD = stepsToday >= metaDaily;
+            // Progreso actual
+            long stepsToday = StepsPrefs.todaySteps(requireContext());
 
-        tvDailyMeta.setText(String.format(Locale.getDefault(), "Meta diaria: %,d pasos", metaDaily));
-        tvDailyProgress.setText(String.format(Locale.getDefault(), "%,d / %,d", stepsToday, metaDaily));
-        pbDaily.setMax(metaDaily);
-        pbDaily.setProgress((int)Math.min(stepsToday, Integer.MAX_VALUE));
+            double kmSemana = getNestedDouble(snap, "usu_stats.km_semana", 0.0);
+            long stepsWeek  = Math.max(0L, Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
 
-        // Recompensa = meta vigente (base 1000 * factor por nivel/dificultad)
-        tvDailyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", metaDaily));
+            // ---- Diario ----
+            boolean claimedD = alreadyClaimedToday();
+            boolean reachedD = stepsToday >= metaDaily;
 
-        btnDailyClaim.setEnabled(reachedD && !claimedD);
-        btnDailyClaim.setAlpha(btnDailyClaim.isEnabled() ? 1f : 0.5f);
+            tvDailyMeta.setText(String.format(Locale.getDefault(), "Meta diaria: %,d pasos", metaDaily));
+            tvDailyProgress.setText(String.format(Locale.getDefault(), "%,d / %,d", stepsToday, metaDaily));
+            pbDaily.setMax(safeInt(metaDaily));
+            pbDaily.setProgress((int)Math.min(stepsToday, Integer.MAX_VALUE));
 
-        if (claimedD) {
-            tvDailyState.setText("Completada");
-            tvDailyState.setTextColor(Color.parseColor("#7BE48F"));
-        } else if (reachedD) {
-            tvDailyState.setText("Listo para reclamar");
-            tvDailyState.setTextColor(Color.parseColor("#6FE6B7"));
-        } else {
-            long faltan = Math.max(0, metaDaily - stepsToday);
-            tvDailyState.setText("Faltan " + faltan + " pasos");
-            tvDailyState.setTextColor(Color.parseColor("#A6A9B1"));
-        }
+            // Recompensa = meta vigente
+            tvDailyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", metaDaily));
 
-        // ---- Semanal ----
-        boolean claimedW = alreadyClaimedWeek();
-        boolean reachedW = stepsWeek >= metaWeekly;
+            btnDailyClaim.setEnabled(reachedD && !claimedD);
+            btnDailyClaim.setAlpha(btnDailyClaim.isEnabled() ? 1f : 0.5f);
 
-        tvWeeklyMeta.setText(String.format(Locale.getDefault(), "Meta semanal: %,d pasos", metaWeekly));
-        tvWeeklyProgress.setText(String.format(Locale.getDefault(), "%,d / %,d", stepsWeek, metaWeekly));
-        pbWeekly.setMax(metaWeekly);
-        pbWeekly.setProgress((int)Math.min(stepsWeek, Integer.MAX_VALUE));
+            if (claimedD) {
+                tvDailyState.setText("Completada");
+                tvDailyState.setTextColor(Color.parseColor("#7BE48F"));
+            } else if (reachedD) {
+                tvDailyState.setText("Listo para reclamar");
+                tvDailyState.setTextColor(Color.parseColor("#6FE6B7"));
+            } else {
+                long faltan = Math.max(0, metaDaily - stepsToday);
+                tvDailyState.setText("Faltan " + faltan + " pasos");
+                tvDailyState.setTextColor(Color.parseColor("#A6A9B1"));
+            }
 
-        tvWeeklyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", metaWeekly));
+            // ---- Semanal ----
+            boolean claimedW = alreadyClaimedWeek();
+            boolean reachedW = stepsWeek >= metaWeekly;
 
-        btnWeeklyClaim.setEnabled(reachedW && !claimedW);
-        btnWeeklyClaim.setAlpha(btnWeeklyClaim.isEnabled() ? 1f : 0.5f);
+            tvWeeklyMeta.setText(String.format(Locale.getDefault(), "Meta semanal: %,d pasos", metaWeekly));
+            tvWeeklyProgress.setText(String.format(Locale.getDefault(), "%,d / %,d", stepsWeek, metaWeekly));
+            pbWeekly.setMax(safeInt(metaWeekly));
+            pbWeekly.setProgress((int)Math.min(stepsWeek, Integer.MAX_VALUE));
 
-        if (claimedW) {
-            tvWeeklyState.setText("Completada");
-            tvWeeklyState.setTextColor(Color.parseColor("#7BE48F"));
-        } else if (reachedW) {
-            tvWeeklyState.setText("Listo para reclamar");
-            tvWeeklyState.setTextColor(Color.parseColor("#6FE6B7"));
-        } else {
-            long faltan = Math.max(0, metaWeekly - stepsWeek);
-            tvWeeklyState.setText("Faltan " + faltan + " pasos");
-            tvWeeklyState.setTextColor(Color.parseColor("#A6A9B1"));
-        }
+            tvWeeklyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", metaWeekly));
+
+            btnWeeklyClaim.setEnabled(reachedW && !claimedW);
+            btnWeeklyClaim.setAlpha(btnWeeklyClaim.isEnabled() ? 1f : 0.5f);
+
+            if (claimedW) {
+                tvWeeklyState.setText("Completada");
+                tvWeeklyState.setTextColor(Color.parseColor("#7BE48F"));
+            } else if (reachedW) {
+                tvWeeklyState.setText("Listo para reclamar");
+                tvWeeklyState.setTextColor(Color.parseColor("#6FE6B7"));
+            } else {
+                long faltan = Math.max(0, metaWeekly - stepsWeek);
+                tvWeeklyState.setText("Faltan " + faltan + " pasos");
+                tvWeeklyState.setTextColor(Color.parseColor("#A6A9B1"));
+            }
+        }, e -> {
+            if (isAdded()) {
+                Toast.makeText(requireContext(), "Error cargando metas: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void claimDaily() {
-        if (userId <= 0 || alreadyClaimedToday()) return;
-        int metaDaily = db.getMetas(userId)[0];
-        long stepsToday = StepsPrefs.todaySteps(requireContext());
-        if (stepsToday < metaDaily) {
-            Toast.makeText(requireContext(), "Todavía no alcanzaste la meta diaria.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (uid == null || alreadyClaimedToday()) return;
 
-        long coins = metaDaily;                // recompensa = meta vigente
-        db.addSaldo(userId, coins);
-        db.onDailyGoalReached(userId);         // +10 xp con level-up y carry del resto
-        markClaimedToday(coins);
+        repo.getUser(uid, snap -> {
+            long metaDaily = getNestedLong(snap, "usu_stats.meta_diaria_pasos", 8000L);
+            long stepsToday = StepsPrefs.todaySteps(requireContext());
+            if (stepsToday < metaDaily) {
+                Toast.makeText(requireContext(), "Todavía no alcanzaste la meta diaria.", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
-        // Notificar a la Activity para refrescar el contador de monedas, si lo usa
-        getParentFragmentManager().setFragmentResult("coins_changed", new Bundle());
-
-        Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show();
-        bindData();
+            // recompensa = meta vigente
+            long coins = metaDaily;
+            repo.claimDaily(uid, coins,
+                    v -> {
+                        markClaimedToday(coins);
+                        // Notificar a la Activity (aunque MainActivity ya escucha por Firestore)
+                        getParentFragmentManager().setFragmentResult("coins_changed", new Bundle());
+                        if (isAdded()) {
+                            Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show();
+                            bindData();
+                        }
+                    },
+                    e -> {
+                        if (isAdded()) {
+                            Toast.makeText(requireContext(), "No se pudo reclamar: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+        }, e -> {
+            if (isAdded()) {
+                Toast.makeText(requireContext(), "Error verificando meta diaria.", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void claimWeekly() {
-        if (userId <= 0 || alreadyClaimedWeek()) return;
+        if (uid == null || alreadyClaimedWeek()) return;
 
-        int metaWeekly = db.getMetas(userId)[1];
-        double kmSemana = db.getKmSemana(userId);
-        long stepsWeek = Math.max(0L, Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
-        if (stepsWeek < metaWeekly) {
-            Toast.makeText(requireContext(), "Todavía no alcanzaste la meta semanal.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        repo.getUser(uid, snap -> {
+            long metaWeekly = getNestedLong(snap, "usu_stats.meta_semanal_pasos", 56000L);
 
-        long coins = metaWeekly;               // recompensa = meta vigente
-        db.addSaldo(userId, coins);
-        db.onWeeklyGoalReached(userId);        // +70 xp con level-up y carry del resto
-        markClaimedWeek(coins);
+            double kmSemana = getNestedDouble(snap, "usu_stats.km_semana", 0.0);
+            long stepsWeek  = Math.max(0L, Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
+            if (stepsWeek < metaWeekly) {
+                Toast.makeText(requireContext(), "Todavía no alcanzaste la meta semanal.", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
-        getParentFragmentManager().setFragmentResult("coins_changed", new Bundle());
-
-        Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show();
-        bindData();
+            long coins = metaWeekly;
+            repo.claimWeekly(uid, coins,
+                    v -> {
+                        markClaimedWeek(coins);
+                        getParentFragmentManager().setFragmentResult("coins_changed", new Bundle());
+                        if (isAdded()) {
+                            Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show();
+                            bindData();
+                        }
+                    },
+                    e -> {
+                        if (isAdded()) {
+                            Toast.makeText(requireContext(), "No se pudo reclamar: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+        }, e -> {
+            if (isAdded()) {
+                Toast.makeText(requireContext(), "Error verificando meta semanal.", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     // ---------- Flags de Claim ----------
@@ -205,22 +242,22 @@ public class GoalsFragment extends DialogFragment {
         Calendar c = Calendar.getInstance();
         return c.get(Calendar.YEAR) + "-" + String.format(Locale.getDefault(), "%02d", c.get(Calendar.WEEK_OF_YEAR));
     }
-    private boolean alreadyClaimedToday() { return ymd().equals(prefs().getString("last_daily_claim_"+userId, "")); }
-    private boolean alreadyClaimedWeek()  { return yearWeek().equals(prefs().getString("last_weekly_claim_"+userId, "")); }
+    private boolean alreadyClaimedToday() { return ymd().equals(prefs().getString("last_daily_claim_"+uid, "")); }
+    private boolean alreadyClaimedWeek()  { return yearWeek().equals(prefs().getString("last_weekly_claim_"+uid, "")); }
     private void markClaimedToday(long amount) {
         prefs().edit()
-                .putString("last_daily_claim_"+userId, ymd())
-                .putLong("last_daily_amount_"+userId, amount)
+                .putString("last_daily_claim_"+uid, ymd())
+                .putLong("last_daily_amount_"+uid, amount)
                 .apply();
     }
     private void markClaimedWeek(long amount) {
         prefs().edit()
-                .putString("last_weekly_claim_"+userId, yearWeek())
-                .putLong("last_weekly_amount_"+userId, amount)
+                .putString("last_weekly_claim_"+uid, yearWeek())
+                .putLong("last_weekly_amount_"+uid, amount)
                 .apply();
     }
 
-    // --------- Pasos (guardados fuera de SQLite) ---------
+    // --------- Pasos (guardados fuera de Firestore) ---------
     static class StepsPrefs {
         private static final String SP_STEPS = "steps_prefs";
         private static final String KEY_TOTAL_PREFIX = "total_";
@@ -229,5 +266,18 @@ public class GoalsFragment extends DialogFragment {
             return ctx.getSharedPreferences(SP_STEPS, Context.MODE_PRIVATE)
                     .getLong(KEY_TOTAL_PREFIX + day, 0L);
         }
+    }
+
+    // --------- Helpers ---------
+    private int safeInt(long value) {
+        return (int) Math.min(value, Integer.MAX_VALUE);
+    }
+    private long getNestedLong(DocumentSnapshot s, String path, long def) {
+        Object v = s.get(path);
+        return (v instanceof Number) ? ((Number) v).longValue() : def;
+    }
+    private double getNestedDouble(DocumentSnapshot s, String path, double def) {
+        Object v = s.get(path);
+        return (v instanceof Number) ? ((Number) v).doubleValue() : def;
     }
 }
