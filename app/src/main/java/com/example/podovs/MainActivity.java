@@ -4,6 +4,8 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -17,7 +19,10 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QuerySnapshot;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -37,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
 
     // >>> Firestore <<<
     private FirestoreRepo repo;
+    private FirebaseFirestore db;
     private String uid = null;
 
     // >>> Steps <<<
@@ -72,7 +78,11 @@ public class MainActivity extends AppCompatActivity {
         tvKmSemanaSmall = findViewById(R.id.tvKmSemanaSmall);
         ivAvatar        = findViewById(R.id.ivAvatar);
         tvCoins         = findViewById(R.id.tvCoins);
+        // Mientras carga Firestore mostramos la piel base si existe, sino el placeholder.
         ivAvatar.setImageResource(R.drawable.default_avatar);
+
+        ivAvatar.setOnClickListener(v ->
+                startActivity(new Intent(this, AvatarActivity.class)));
 
         // ==== Sesión Firebase ====
         SharedPreferences spSession = getSharedPreferences("session", MODE_PRIVATE);
@@ -85,6 +95,10 @@ public class MainActivity extends AppCompatActivity {
 
         // ==== Repo Firestore ====
         repo = new FirestoreRepo();
+        db   = FirebaseFirestore.getInstance();
+
+        // idempotente: si falta el pack inicial, lo crea
+        repo.addStarterPackIfMissing(uid, v -> {}, e -> {});
 
         // Inicializa clave de fecha si viene vacía
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
@@ -92,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
             sp.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
         }
 
-        // Listener del documento del usuario (saldo, km semana, etc.)
+        // Listener del documento del usuario (saldo, km semana, equipamiento, etc.)
         repo.listenUser(uid, (snap, err) -> {
             if (err != null) {
                 Log.w(TAG, "listenUser error: " + err.getMessage());
@@ -112,6 +126,8 @@ public class MainActivity extends AppCompatActivity {
                             String.format(Locale.getDefault(), "Semana: %.2f km", kmSemanaCache)
                     );
                 }
+                // avatar segun equipamiento
+                renderAvatarFromUserSnapshot(snap);
             }
         });
 
@@ -119,20 +135,15 @@ public class MainActivity extends AppCompatActivity {
         long pasosGuardados = sp.getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosGuardados));
 
-        // StepsManager: NO persistimos en SQLite. Solo usamos el callback para:
-        // 1) guardar pasos del día localmente (para el rollover),
-        // 2) subir km del día a Firestore.
+        // StepsManager: callback actualiza pasos locales y sube km_hoy
         stepsManager = new StepsManager(this, /*db=*/null, /*userId=*/0L, (stepsToday, kmHoy) -> {
             SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
             prefs.edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
 
             tvKmTotalBig.setText(String.valueOf(stepsToday));
 
-            // Persistir km del día en Firestore
             if (uid != null) {
-                repo.setKmHoy(uid, kmHoy,
-                        v -> { /* ok */ },
-                        e -> Log.w(TAG, "setKmHoy error: " + e.getMessage()));
+                repo.setKmHoy(uid, kmHoy, v -> {}, e -> Log.w(TAG, "setKmHoy error: " + e.getMessage()));
             }
         });
 
@@ -146,7 +157,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Si algún fragmento cambió monedas, Firestore nos actualizará por listener.
         getSupportFragmentManager().setFragmentResultListener(
-                "coins_changed", this, (requestKey, bundle) -> { /* no-op: listener ya refresca */ }
+                "coins_changed", this, (requestKey, bundle) -> { /* no-op */ }
         );
 
         requestRuntimePermissions();
@@ -159,7 +170,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // listener ya mantiene saldo y km semana
         maybeRunRollover();
         updateSmallWeekAndBigStepsFromStorage();
         secureStartSteps();
@@ -284,20 +294,12 @@ public class MainActivity extends AppCompatActivity {
         // Suma al semanal y limpia el día en Firestore usando el cache local
         double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
 
-        repo.setKmSemana(uid, nuevoSem,
-                v -> { /* ok */ },
-                e -> Log.w(TAG, "setKmSemana error: " + e.getMessage()));
-
-        repo.setKmHoy(uid, 0.0,
-                v -> { /* ok */ },
-                e -> Log.w(TAG, "setKmHoy(0) error: " + e.getMessage()));
+        repo.setKmSemana(uid, nuevoSem, v -> {}, e -> Log.w(TAG, "setKmSemana error: " + e.getMessage()));
+        repo.setKmHoy(uid, 0.0, v -> {}, e -> Log.w(TAG, "setKmHoy(0) error: " + e.getMessage()));
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
         if (diasContados >= 7) {
-            // Reinicia semana en Firestore y cache
-            repo.setKmSemana(uid, 0.0,
-                    v -> { /* ok */ },
-                    e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
+            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
             kmSemanaCache = 0.0;
             diasContados = 0;
         }
@@ -323,9 +325,100 @@ public class MainActivity extends AppCompatActivity {
 
     @Nullable
     private Double getNestedDouble(DocumentSnapshot snap, String dottedPath) {
-        // Firestore permite maps; accedemos por claves
         Object val = snap.get(dottedPath);
         if (val instanceof Number) return ((Number) val).doubleValue();
         return null;
     }
+
+    // ===================== AVATAR =====================
+
+    /** Lee los cos_id equipados del doc del usuario y arma el avatar. */
+    private void renderAvatarFromUserSnapshot(DocumentSnapshot snap) {
+        String pielId     = asString(snap.get("usu_equipped.usu_piel"));
+        String pantalonId = asString(snap.get("usu_equipped.usu_pantalon"));
+        String remeraId   = asString(snap.get("usu_equipped.usu_remera"));
+        String zapasId    = asString(snap.get("usu_equipped.usu_zapas"));
+        String cabezaId   = asString(snap.get("usu_equipped.usu_cabeza"));
+
+        // Si no hay nada equipado aún, mostramos la piel_startskin si existe
+        if (pielId == null && pantalonId == null && remeraId == null
+                && zapasId == null && cabezaId == null) {
+            int fallback = getResIdByName("piel_startskin");
+            if (fallback != 0) ivAvatar.setImageResource(fallback);
+            return;
+        }
+
+        // Leemos UNA VEZ la subcolección para mapear cos_id -> asset local
+        db.collection("users").document(uid).collection("my_cosmetics")
+                .get()
+                .addOnSuccessListener(qs -> buildAvatarFromMyCosmetics(qs, pielId, pantalonId, remeraId, zapasId, cabezaId))
+                .addOnFailureListener(e -> Log.w(TAG, "my_cosmetics get() error: " + e.getMessage()));
+    }
+
+    /** Construye y setea el LayerDrawable respetando el orden de capas. */
+    private void buildAvatarFromMyCosmetics(QuerySnapshot qs,
+                                            @Nullable String pielId,
+                                            @Nullable String pantalonId,
+                                            @Nullable String remeraId,
+                                            @Nullable String zapasId,
+                                            @Nullable String cabezaId) {
+
+        String pielAsset     = findAssetFor(qs, pielId);
+        String pantAsset     = findAssetFor(qs, pantalonId);
+        String remeraAsset   = findAssetFor(qs, remeraId);
+        String zapasAsset    = findAssetFor(qs, zapasId);
+        String cabezaAsset   = findAssetFor(qs, cabezaId);
+
+        // Construimos la lista de drawables en orden de pintura (back -> front)
+        ArrayList<Drawable> layers = new ArrayList<>();
+
+        addLayerIfExists(layers, pielAsset);      // base
+        addLayerIfExists(layers, pantAsset);      // pantalón
+        addLayerIfExists(layers, remeraAsset);    // remera
+        addLayerIfExists(layers, zapasAsset);     // zapatillas
+        addLayerIfExists(layers, cabezaAsset);    // gorra/sombrero
+
+        if (layers.isEmpty()) {
+            // fallback si algo raro pasó
+            int def = getResIdByName("piel_startskin");
+            if (def != 0) ivAvatar.setImageResource(def);
+            return;
+        }
+
+        LayerDrawable ld = new LayerDrawable(layers.toArray(new Drawable[0]));
+        ivAvatar.setImageDrawable(ld);
+        ivAvatar.setAdjustViewBounds(true);
+    }
+
+    // ---- helpers avatar ----
+
+    @Nullable
+    private String asString(Object o) {
+        return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null;
+    }
+
+    @Nullable
+    private String findAssetFor(QuerySnapshot qs, @Nullable String cosId) {
+        if (cosId == null) return null;
+        DocumentSnapshot d = qs.getDocuments().stream()
+                .filter(doc -> cosId.equals(doc.getId()))
+                .findFirst().orElse(null);
+        if (d == null) return null;
+        Object v = d.get("myc_cache.cos_asset");
+        return (v instanceof String && !((String) v).isEmpty()) ? (String) v : null;
+    }
+
+    private void addLayerIfExists(ArrayList<Drawable> layers, @Nullable String assetName) {
+        if (assetName == null) return;
+        int resId = getResIdByName(assetName);
+        if (resId == 0) return;
+        Drawable dr = ContextCompat.getDrawable(this, resId);
+        if (dr != null) layers.add(dr);
+    }
+
+    private int getResIdByName(String name) {
+        return getResources().getIdentifier(name, "drawable", getPackageName());
+    }
+
+
 }

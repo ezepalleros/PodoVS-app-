@@ -4,9 +4,12 @@ import androidx.annotation.NonNull;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.EventListener;
@@ -15,14 +18,30 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.Transaction;
+import com.google.firebase.firestore.WriteBatch;
+import com.google.firebase.firestore.SetOptions;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 
 public class FirestoreRepo {
 
     private final FirebaseFirestore db;
     private final FirebaseAuth auth;
+
+    // -------- Starter pack --------
+    private static final String[] STARTER_IDS = {
+            "cos_id_1", // cabeza_bwcap
+            "cos_id_2", // piel_startskin  (default equip)
+            "cos_id_3", // piel_deepebony
+            "cos_id_4", // torso_greenshirt
+            "cos_id_5", // pierna_bluejeans
+            "cos_id_6"  // pies_comicallylong
+    };
+    private static final String DEFAULT_SKIN_ID = "cos_id_2"; // equip por defecto
 
     public FirestoreRepo() {
         db = FirebaseFirestore.getInstance();
@@ -37,12 +56,11 @@ public class FirestoreRepo {
         return db.collection("cosmetics").document(cosId);
     }
     private DocumentReference inventoryDoc(@NonNull String uid, @NonNull String cosId) {
-        return userDoc(uid).collection("inventory").document(cosId);
+        return userDoc(uid).collection("my_cosmetics").document(cosId);
     }
 
     // ---------- Auth ----------
-    public void signIn(@NonNull String email,
-                       @NonNull String password,
+    public void signIn(@NonNull String email, @NonNull String password,
                        @NonNull OnSuccessListener<AuthResult> ok,
                        @NonNull OnFailureListener err) {
         auth.signInWithEmailAndPassword(email, password)
@@ -50,8 +68,7 @@ public class FirestoreRepo {
                 .addOnFailureListener(err);
     }
 
-    public void createUser(@NonNull String email,
-                           @NonNull String password,
+    public void createUser(@NonNull String email, @NonNull String password,
                            @NonNull OnSuccessListener<AuthResult> ok,
                            @NonNull OnFailureListener err) {
         auth.createUserWithEmailAndPassword(email, password)
@@ -68,7 +85,7 @@ public class FirestoreRepo {
         userDoc(uid).get().addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    /** Crea el perfil del usuario (doc id = UID) con metas 1000/10000 y km_semana = 0. */
+    /** Crea el perfil con metas por defecto (1000/10000) y km_semana=0. */
     public void initUserProfile(@NonNull String uid,
                                 @NonNull String nombre,
                                 @NonNull String dif,
@@ -82,12 +99,12 @@ public class FirestoreRepo {
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("km_hoy", 0.0);
-        stats.put("km_semana", 0.0);   // <-- arranca en 0
+        stats.put("km_semana", 0.0);
         stats.put("km_total", 0.0);
         stats.put("xp", 0L);
         stats.put("objetos_comprados", 0L);
-        stats.put("meta_diaria_pasos", 1000L);   // <-- default pedido
-        stats.put("meta_semanal_pasos", 10000L); // <-- default pedido
+        stats.put("meta_diaria_pasos", 1000L);
+        stats.put("meta_semanal_pasos", 10000L);
         data.put("usu_stats", stats);
 
         Map<String, Object> eq = new HashMap<>();
@@ -95,10 +112,12 @@ public class FirestoreRepo {
         eq.put("usu_remera", null);
         eq.put("usu_pantalon", null);
         eq.put("usu_zapas", null);
-        eq.put("usu_piel", null);
+        eq.put("usu_piel", null); // se setea luego por starter pack
         data.put("usu_equipped", eq);
 
-        userDoc(uid).set(data).addOnSuccessListener(ok).addOnFailureListener(err);
+        userDoc(uid).set(data)
+                .addOnSuccessListener(ok)
+                .addOnFailureListener(err);
     }
 
     // ---------- Ranking ----------
@@ -127,7 +146,7 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---------- Stats ----------
+    // ---------- Stats básicos ----------
     public void setKmHoy(@NonNull String uid, double km,
                          @NonNull OnSuccessListener<Void> ok,
                          @NonNull OnFailureListener err) {
@@ -192,16 +211,16 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---------- Recompensas por metas ----------
+    // ---------- Recompensas ----------
     public void onDailyGoalReached(@NonNull String uid,
                                    @NonNull OnSuccessListener<Void> ok,
                                    @NonNull OnFailureListener err) {
         db.runTransaction((Transaction.Function<Void>) tr -> {
-            tr.update(userDoc(uid), new HashMap<String, Object>() {{
-                put("usu_saldo", FieldValue.increment(50));
-                put("usu_stats.xp", FieldValue.increment(25));
-                put("usu_stats.metas_diarias_cumplidas", FieldValue.increment(1));
-            }});
+            Map<String, Object> m = new HashMap<>();
+            m.put("usu_saldo", FieldValue.increment(50));
+            m.put("usu_stats.xp", FieldValue.increment(25));
+            m.put("usu_stats.metas_diarias_cumplidas", FieldValue.increment(1));
+            tr.update(userDoc(uid), m);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
@@ -210,23 +229,106 @@ public class FirestoreRepo {
                                     @NonNull OnSuccessListener<Void> ok,
                                     @NonNull OnFailureListener err) {
         db.runTransaction((Transaction.Function<Void>) tr -> {
-            tr.update(userDoc(uid), new HashMap<String, Object>() {{
-                put("usu_saldo", FieldValue.increment(250));
-                put("usu_stats.xp", FieldValue.increment(100));
-                put("usu_stats.metas_semanales_cumplidas", FieldValue.increment(1));
-            }});
+            Map<String, Object> m = new HashMap<>();
+            m.put("usu_saldo", FieldValue.increment(250));
+            m.put("usu_stats.xp", FieldValue.increment(100));
+            m.put("usu_stats.metas_semanales_cumplidas", FieldValue.increment(1));
+            tr.update(userDoc(uid), m);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
     // ---------- Inventario / Cosméticos ----------
+    /** Crea los 6 items del starter pack si faltan y equipa cos_id_2 como piel. */
+    public void addStarterPackIfMissing(@NonNull String uid,
+                                        @NonNull OnSuccessListener<Void> ok,
+                                        @NonNull OnFailureListener err) {
+
+        CollectionReference myCos = userDoc(uid).collection("my_cosmetics");
+
+        // 1) ¿Qué ya tiene?
+        myCos.get().addOnSuccessListener(qs -> {
+            HashSet<String> have = new HashSet<>();
+            for (DocumentSnapshot d : qs.getDocuments()) have.add(d.getId());
+
+            // 2) Calcular faltantes
+            HashSet<String> missing = new HashSet<>();
+            for (String id : STARTER_IDS) if (!have.contains(id)) missing.add(id);
+
+            // Si no falta ninguno, igual marcamos equip por si quedó desmarcado
+            if (missing.isEmpty()) {
+                WriteBatch batch = db.batch();
+                batch.set(
+                        inventoryDoc(uid, DEFAULT_SKIN_ID),
+                        new HashMap<String, Object>() {{ put("myc_equipped", true); }},
+                        SetOptions.merge()
+                );
+                batch.update(userDoc(uid), "usu_equipped.usu_piel", DEFAULT_SKIN_ID);
+                batch.commit().addOnSuccessListener(ok).addOnFailureListener(err);
+                return;
+            }
+
+            // 3) Leer metadata de cosmetics para los faltantes
+            List<Task<DocumentSnapshot>> fetches = new ArrayList<>();
+            for (String id : missing) fetches.add(cosmeticDoc(id).get());
+
+            Tasks.whenAllSuccess(fetches).addOnSuccessListener(results -> {
+                WriteBatch batch = db.batch();
+
+                for (Object o : results) {
+                    DocumentSnapshot cos = (DocumentSnapshot) o;
+                    String cosId = cos.getId();
+
+                    Map<String, Object> cache = new HashMap<>();
+                    cache.put("cos_asset", cos.getString("cos_asset"));
+                    cache.put("cos_assetType", cos.getString("cos_assetType"));
+                    cache.put("cos_nombre", cos.getString("cos_nombre"));
+                    cache.put("cos_tipo", cos.getString("cos_tipo"));
+
+                    Map<String, Object> sub = new HashMap<>();
+                    sub.put("myc_cache", cache);
+                    sub.put("myc_obtenido", FieldValue.serverTimestamp());
+                    sub.put("myc_equipped", DEFAULT_SKIN_ID.equals(cosId)); // solo la piel default en true
+
+                    batch.set(inventoryDoc(uid, cosId), sub);
+                }
+
+                // Asegurar equip del usuario a la piel default
+                batch.update(userDoc(uid), "usu_equipped.usu_piel", DEFAULT_SKIN_ID);
+
+                // Si cos_id_2 ya existía, asegurar myc_equipped=true
+                if (!missing.contains(DEFAULT_SKIN_ID)) {
+                    batch.set(
+                            inventoryDoc(uid, DEFAULT_SKIN_ID),
+                            new HashMap<String, Object>() {{ put("myc_equipped", true); }},
+                            SetOptions.merge()
+                    );
+                }
+
+                batch.commit().addOnSuccessListener(ok).addOnFailureListener(err);
+            }).addOnFailureListener(err);
+
+        }).addOnFailureListener(err);
+    }
+
+    /** Agrega un cosmético “normal” al inventario del usuario. */
     public void addToInventory(@NonNull String uid, @NonNull String cosId, boolean usando,
                                @NonNull OnSuccessListener<Void> ok, @NonNull OnFailureListener err) {
         Map<String, Object> data = new HashMap<>();
-        data.put("usando", usando);
-        data.put("acquired_at", FieldValue.serverTimestamp());
-        inventoryDoc(uid, cosId).set(data)
-                .addOnSuccessListener(ok).addOnFailureListener(err);
+        data.put("myc_equipped", usando);
+        data.put("myc_obtenido", FieldValue.serverTimestamp());
+
+        cosmeticDoc(cosId).get().addOnSuccessListener(s -> {
+            Map<String, Object> cache = new HashMap<>();
+            cache.put("cos_asset", s.getString("cos_asset"));
+            cache.put("cos_assetType", s.getString("cos_assetType"));
+            cache.put("cos_nombre", s.getString("cos_nombre"));
+            cache.put("cos_tipo", s.getString("cos_tipo"));
+            data.put("myc_cache", cache);
+
+            inventoryDoc(uid, cosId).set(data)
+                    .addOnSuccessListener(ok).addOnFailureListener(err);
+        }).addOnFailureListener(err);
     }
 
     public void equip(@NonNull String uid, @NonNull String cosId, @NonNull String tipo,
@@ -242,44 +344,13 @@ public class FirestoreRepo {
         userDoc(uid).update(m).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    public void buyCosmetic(@NonNull String uid, @NonNull String cosId, boolean autoEquip,
-                            @NonNull OnSuccessListener<Void> ok, @NonNull OnFailureListener err) {
-        db.runTransaction((Transaction.Function<Void>) tr -> {
-            DocumentSnapshot user = tr.get(userDoc(uid));
-            DocumentSnapshot cos = tr.get(cosmeticDoc(cosId));
-            if (!cos.exists()) throw new IllegalStateException("Cosmético inexistente");
-            long precio = cos.getLong("cos_precio") == null ? 0L : cos.getLong("cos_precio");
-            String tipo = cos.getString("cos_tipo");
-            long saldo = user.getLong("usu_saldo") == null ? 0L : user.getLong("usu_saldo");
-            if (saldo < precio) throw new IllegalStateException("Saldo insuficiente");
-            tr.update(userDoc(uid), "usu_saldo", saldo - precio);
-            Map<String, Object> inv = new HashMap<>();
-            inv.put("usando", autoEquip);
-            inv.put("acquired_at", FieldValue.serverTimestamp());
-            tr.set(inventoryDoc(uid, cosId), inv);
-            if (autoEquip && tipo != null) {
-                Map<String, Object> m = new HashMap<>();
-                switch (tipo.toLowerCase()) {
-                    case "cabeza": m.put("usu_equipped.usu_cabeza", cosId); break;
-                    case "remera": m.put("usu_equipped.usu_remera", cosId); break;
-                    case "pantalon": m.put("usu_equipped.usu_pantalon", cosId); break;
-                    case "zapatillas": m.put("usu_equipped.usu_zapas", cosId); break;
-                    case "piel": m.put("usu_equipped.usu_piel", cosId); break;
-                }
-                tr.update(userDoc(uid), m);
-            }
-            tr.update(userDoc(uid), "usu_stats.objetos_comprados", FieldValue.increment(1));
-            return null;
-        }).addOnSuccessListener(ok).addOnFailureListener(err);
-    }
-
     // ---------- Live listener ----------
     public ListenerRegistration listenUser(@NonNull String uid,
                                            @NonNull EventListener<DocumentSnapshot> listener) {
         return userDoc(uid).addSnapshotListener(listener);
     }
 
-    // ---------- Claims (monedas desde la meta vigente) ----------
+    // ---------- Claims ----------
     public void claimDaily(@NonNull String uid, long coins,
                            @NonNull OnSuccessListener<Void> ok,
                            @NonNull OnFailureListener err) {

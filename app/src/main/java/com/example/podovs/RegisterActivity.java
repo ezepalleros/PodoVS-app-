@@ -128,10 +128,12 @@ public class RegisterActivity extends AppCompatActivity {
         if (onboardingUid != null) {
             // Solo inicializa perfil para uid ya logueado
             repo.initUserProfile(onboardingUid, nombre, dif,
-                    v -> {
-                        clearLocalSteps();                 // evita arrastre a km_semana
-                        saveSessionAndGo(onboardingUid, nombre);
-                    },
+                    v -> repo.addStarterPackIfMissing(
+                            onboardingUid,
+                            vv -> { saveSessionAndGo(onboardingUid, nombre); },
+                            e2 -> { btnCrearCuenta.setEnabled(true);
+                                Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show(); }
+                    ),
                     e -> {
                         btnCrearCuenta.setEnabled(true);
                         Toast.makeText(this, "No se pudo inicializar el perfil: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -143,7 +145,7 @@ public class RegisterActivity extends AppCompatActivity {
                 Toast.makeText(this, "Completá email y contraseña.", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // Crea cuenta y luego perfil
+            // Crea cuenta y luego perfil + starter pack
             repo.createUser(email, pass,
                     (AuthResult r) -> {
                         String uid = (r.getUser() != null) ? r.getUser().getUid() : null;
@@ -153,10 +155,12 @@ public class RegisterActivity extends AppCompatActivity {
                             return;
                         }
                         repo.initUserProfile(uid, nombre, dif,
-                                v -> {
-                                    clearLocalSteps();         // evita arrastre a km_semana
-                                    saveSessionAndGo(uid, nombre);
-                                },
+                                v -> repo.addStarterPackIfMissing(
+                                        uid,
+                                        vv -> { saveSessionAndGo(uid, nombre); },
+                                        e2 -> { btnCrearCuenta.setEnabled(true);
+                                            Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show(); }
+                                ),
                                 e -> {
                                     btnCrearCuenta.setEnabled(true);
                                     Toast.makeText(this, "No se pudo crear el perfil: " + e.getMessage(), Toast.LENGTH_LONG).show();

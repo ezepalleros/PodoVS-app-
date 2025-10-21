@@ -2,6 +2,7 @@ package com.example.podovs;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -14,10 +15,14 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QuerySnapshot;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -38,6 +43,7 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
     // Repo / sesión
     private FirestoreRepo repo;
+    private FirebaseFirestore db;
     private String uid = null;
 
     // Config
@@ -47,7 +53,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     private static final int XP_PER_LEVEL_BASE = 100; // debe coincidir con FirestoreRepo (100 * nivel)
 
     // Conjunto de métricas disponibles (clave Firestore -> título en UI)
-    // Claves son paths de Firestore dentro del doc users/{uid}
     private static final LinkedHashMap<String, String> METRIC_TITLES = new LinkedHashMap<>();
     static {
         METRIC_TITLES.put("usu_stats.km_total", "Km recorridos");
@@ -56,7 +61,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         METRIC_TITLES.put("usu_stats.metas_semanales_cumplidas", "Metas semanales OK");
         METRIC_TITLES.put("usu_stats.km_semana", "Km esta semana");
         METRIC_TITLES.put("usu_stats.km_hoy", "Km hoy");
-        // Podés agregar más cuando existan en Firestore (p. ej., carreras, eventos, etc.)
     }
 
     public ProfileFragment() {}
@@ -91,14 +95,18 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         ImageButton btnClose = v.findViewById(R.id.btnCloseSheet);
         btnClose.setOnClickListener(view -> dismiss());
 
+        // Para que no distorsione el sprite
+        ivAvatar.setAdjustViewBounds(true);
+        ivAvatar.setScaleType(ImageView.ScaleType.CENTER);
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
         uid = requireContext()
                 .getSharedPreferences("session", Context.MODE_PRIVATE)
                 .getString("uid", null);
         repo = new FirestoreRepo();
+        db   = FirebaseFirestore.getInstance();
 
-        // Cargar header y tarjetas
+        // Cargar header (nombre/nivel/XP) y tarjetas + avatar
         loadHeaderAndCards();
 
         // Editar qué métrica se muestra en cada tarjeta
@@ -130,8 +138,11 @@ public class ProfileFragment extends BottomSheetDialogFragment {
             // Tarjetas
             refreshStatCardsWithSnapshot(snap);
 
+            // Avatar (capas desde my_cosmetics)
+            renderAvatarFromUserSnapshot(snap);
+
         }, e -> {
-            // Podés loguear o mostrar un toast si querés
+            // opcional: log/Toast
         });
     }
 
@@ -143,7 +154,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         String k1 = sp.getString(KEY_SLOT1, default1);
         String k2 = sp.getString(KEY_SLOT2, default2);
 
-        // Evitar que ambas tarjetas muestren lo mismo en el primer inicio
         if (TextUtils.equals(k1, k2)) k2 = default2;
 
         Map<String, Object> values = readAllMetricsFromSnapshot(snap);
@@ -161,7 +171,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         for (String key : METRIC_TITLES.keySet()) {
             Object v = snap.get(key);
             if (v == null) {
-                // defaults razonables
                 if (key.endsWith("km_total") || key.endsWith("km_semana") || key.endsWith("km_hoy")) {
                     map.put(key, 0.0);
                 } else {
@@ -184,7 +193,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
             double km = (value instanceof Number) ? ((Number) value).doubleValue() : 0d;
             return String.format(Locale.getDefault(), "%.2f", km);
         }
-        // restantes: enteros
         long v = (value instanceof Number) ? ((Number) value).longValue() : 0L;
         return String.format(Locale.getDefault(), "%,d", v);
     }
@@ -203,10 +211,120 @@ public class ProfileFragment extends BottomSheetDialogFragment {
                     } else {
                         sp.edit().putString(KEY_SLOT2, chosenKey).apply();
                     }
-                    // Recargar solo las tarjetas (con los últimos datos)
                     loadHeaderAndCards();
                 })
                 .show();
+    }
+
+    // ===================== AVATAR =====================
+
+    /** Lee los cos_id equipados del doc y arma el avatar por capas. */
+    private void renderAvatarFromUserSnapshot(DocumentSnapshot snap) {
+        String pielId     = asString(snap.get("usu_equipped.usu_piel"));
+        String pantalonId = asString(snap.get("usu_equipped.usu_pantalon"));
+        String remeraId   = asString(snap.get("usu_equipped.usu_remera"));
+        String zapasId    = asString(snap.get("usu_equipped.usu_zapas"));
+        String cabezaId   = asString(snap.get("usu_equipped.usu_cabeza"));
+
+        // Si no hay nada equipado, mostrar piel_startskin y salir
+        if (pielId == null && pantalonId == null && remeraId == null
+                && zapasId == null && cabezaId == null) {
+            int fallback = getResIdByName("piel_startskin");
+            if (fallback != 0 && isAdded()) ivAvatar.setImageResource(fallback);
+            return;
+        }
+
+        db.collection("users").document(uid).collection("my_cosmetics")
+                .get()
+                .addOnSuccessListener(qs -> buildAvatarFromMyCosmetics(qs, pielId, pantalonId, remeraId, zapasId, cabezaId));
+    }
+
+    /** Construye y setea el LayerDrawable respetando el orden de capas. */
+    private void buildAvatarFromMyCosmetics(QuerySnapshot qs,
+                                            @Nullable String pielId,
+                                            @Nullable String pantalonId,
+                                            @Nullable String remeraId,
+                                            @Nullable String zapasId,
+                                            @Nullable String cabezaId) {
+        if (!isAdded()) return;
+
+        String pielAsset   = findAssetFor(qs, pielId);
+        String pantAsset   = findAssetFor(qs, pantalonId);
+        String remeraAsset = findAssetFor(qs, remeraId);
+        String zapasAsset  = findAssetFor(qs, zapasId);
+        String cabezaAsset = findAssetFor(qs, cabezaId);
+
+        ArrayList<android.graphics.drawable.Drawable> layers = new ArrayList<>();
+        addLayerIfExists(layers, pielAsset);
+        addLayerIfExists(layers, pantAsset);
+        addLayerIfExists(layers, remeraAsset);
+        addLayerIfExists(layers, zapasAsset);
+        addLayerIfExists(layers, cabezaAsset);
+
+        if (layers.isEmpty()) {
+            int def = getResIdByName("piel_startskin");
+            if (def != 0) ivAvatar.setImageResource(def);
+            return;
+        }
+
+        // 1) Tamaño base del sprite (fallback 32x48)
+        int baseW = Math.max(1, layers.get(0).getIntrinsicWidth());
+        int baseH = Math.max(1, layers.get(0).getIntrinsicHeight());
+        if (baseW <= 1 || baseH <= 1) { baseW = 32; baseH = 48; }
+
+        // 2) Componer todas las capas en un bitmap base sin escalado
+        Bitmap baseBmp = Bitmap.createBitmap(baseW, baseH, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(baseBmp);
+        for (android.graphics.drawable.Drawable d : layers) {
+            d.setBounds(0, 0, baseW, baseH);
+            d.draw(canvas);
+        }
+
+        // 3) Escalar con vecino más cercano a ~96dp de alto (factor entero)
+        final int targetHpx = dpToPx(96);                // <-- ajustá aquí si querés más chico
+        int factor = Math.max(1, targetHpx / baseH);     // sin filtros, pixel-perfect
+
+        int outW = baseW * factor;
+        int outH = baseH * factor;
+        Bitmap scaled = Bitmap.createScaledBitmap(baseBmp, outW, outH, /*filter=*/false);
+
+        // 4) Mostrar centrado y sin recorte; NO tocar LayoutParams
+        ivAvatar.setAdjustViewBounds(true);
+        ivAvatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        ivAvatar.setImageBitmap(scaled);
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
+    @Nullable
+    private String asString(Object o) {
+        return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null;
+    }
+
+    @Nullable
+    private String findAssetFor(QuerySnapshot qs, @Nullable String cosId) {
+        if (cosId == null) return null;
+        for (DocumentSnapshot d : qs.getDocuments()) {
+            if (cosId.equals(d.getId())) {
+                Object v = d.get("myc_cache.cos_asset");
+                if (v instanceof String && !((String) v).isEmpty()) return (String) v;
+            }
+        }
+        return null;
+    }
+
+    private void addLayerIfExists(ArrayList<android.graphics.drawable.Drawable> layers, @Nullable String assetName) {
+        if (assetName == null) return;
+        int resId = getResIdByName(assetName);
+        if (resId == 0) return;
+        android.graphics.drawable.Drawable dr = ContextCompat.getDrawable(requireContext(), resId);
+        if (dr != null) layers.add(dr);
+    }
+
+    private int getResIdByName(String name) {
+        return getResources().getIdentifier(name, "drawable", requireContext().getPackageName());
     }
 
     // --------- Helpers ---------

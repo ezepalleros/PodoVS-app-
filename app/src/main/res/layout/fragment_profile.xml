@@ -44,8 +44,8 @@
         <!-- Avatar -->
         <ImageView
             android:id="@+id/ivAvatarLarge"
-            android:layout_width="140dp"
-            android:layout_height="140dp"
+            android:layout_width="96dp"
+            android:layout_height="96dp"
             android:layout_gravity="center_horizontal"
             android:src="@drawable/default_avatar"
             android:scaleType="centerInside"
@@ -230,30 +230,6 @@
         </LinearLayout>
 
         <!-- Hitos / Próximamente -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="120dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            app:cardBackgroundColor="#32333A"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="4dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:gravity="center">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Próximamente"
-                    android:textStyle="bold"
-                    android:textSize="18sp"
-                    android:textColor="#C7CAD1" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
 
     </LinearLayout>
 </ScrollView>
