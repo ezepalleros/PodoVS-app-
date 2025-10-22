@@ -16,18 +16,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** Maneja conteo de pasos en foreground + persistencia diaria local + callback de UI.
- *  Toda persistencia remota (Firestore, etc.) debe hacerse en quien instancie, usando el callback. */
+/** Conteo de pasos local + callback de UI (sin BDD). */
 public class StepsManager {
 
-    public interface Callback {
-        /** Se llama SIEMPRE en el hilo principal. */
-        void onStepsUpdated(long stepsToday, double kmHoy);
-    }
+    public interface Callback { void onStepsUpdated(long stepsToday, double kmHoy); }
 
     private static final String SP_NAME = "steps_prefs";
-    private static final String KEY_BASE_PREFIX  = "base_";   // yyyyMMdd
-    private static final String KEY_TOTAL_PREFIX = "total_";  // yyyyMMdd
+    private static final String KEY_BASE_PREFIX   = "base_";        // yyyyMMdd
+    private static final String KEY_TOTAL_PREFIX  = "total_";       // yyyyMMdd
+    private static final String KEY_LAST_COUNTER  = "last_counter"; // float TYPE_STEP_COUNTER
+    private static final String KEY_LAST_COUNTER_DAY = "last_counter_day";
+    private static final String KEY_RECORD_STEPS  = "record_steps";
+    private static final String KEY_RECORD_DAY    = "record_day";
+
     private static final double METROS_POR_PASO = 0.78;
 
     private final Context appCtx;
@@ -47,7 +48,6 @@ public class StepsManager {
 
     private ScheduledExecutorService tickScheduler;
 
-    /** Constructor recomendado (sin BDD). */
     public StepsManager(Context context, Callback callback) {
         this.appCtx = context.getApplicationContext();
         this.callback = callback;
@@ -62,17 +62,30 @@ public class StepsManager {
         SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
         baseOffset = prefs.getFloat(keyBaseToday, -1f);
         stepsToday = prefs.getLong(keyTotalToday, 0L);
+
+        // reconstruir base si ya teníamos contador acumulado guardado del mismo día
+        if (baseOffset < 0f) {
+            String today = dayCode();
+            String lastDay = prefs.getString(KEY_LAST_COUNTER_DAY, "");
+            if (today.equals(lastDay)) {
+                float lastCounter = prefs.getFloat(KEY_LAST_COUNTER, -1f);
+                if (lastCounter >= 0f) {
+                    float reconstructed = lastCounter - stepsToday;
+                    if (reconstructed < 0f) reconstructed = 0f;
+                    baseOffset = reconstructed;
+                    prefs.edit().putFloat(keyBaseToday, baseOffset).apply();
+                }
+            }
+        }
     }
 
-    /** Constructor legacy para compatibilidad con llamadas existentes: ignora db/userId. */
-    public StepsManager(Context context, /*@Nullable*/ Object ignoredDb, long ignoredUserId, Callback callback) {
+    // Compatibilidad con ctor legacy
+    public StepsManager(Context context, Object ignoredDb, long ignoredUserId, Callback callback) {
         this(context, callback);
     }
 
-    /** Idempotente: si ya está escuchando, no hace nada. */
     public void start() {
         if (listening) { emitUpdate(); return; }
-
         if (stepCounter != null) {
             usingDetector = false;
             sensorManager.registerListener(listener, stepCounter, SensorManager.SENSOR_DELAY_GAME);
@@ -80,22 +93,17 @@ public class StepsManager {
             usingDetector = true;
             sensorManager.registerListener(listener, stepDetector, SensorManager.SENSOR_DELAY_GAME);
         } else {
-            listening = false;
-            emitUpdate();
-            return;
+            listening = false; emitUpdate(); return;
         }
         listening = true;
 
-        // “Tick” suave cada 3 s para refrescar UI aunque no haya eventos del sensor.
         if (tickScheduler == null || tickScheduler.isShutdown()) {
             tickScheduler = Executors.newSingleThreadScheduledExecutor();
-            tickScheduler.scheduleAtFixedRate(() -> emitUpdate(), 0, 3, TimeUnit.SECONDS);
+            tickScheduler.scheduleAtFixedRate(this::emitUpdate, 0, 3, TimeUnit.SECONDS);
         }
-
         emitUpdate();
     }
 
-    /** Detiene sensores y scheduler. Idempotente. */
     public void stop() {
         if (listening) {
             try { sensorManager.unregisterListener(listener); } catch (Exception ignore) {}
@@ -105,24 +113,47 @@ public class StepsManager {
     }
 
     public long getStepsToday() { return stepsToday; }
+    public double getKmToday()  { return round2(stepsToday * METROS_POR_PASO / 1000.0); }
+    public long getDailyRecordLocal() {
+        return appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).getLong(KEY_RECORD_STEPS, 0L);
+    }
 
-    // Listener interno
     private final SensorEventListener listener = new SensorEventListener() {
         @Override public void onSensorChanged(SensorEvent event) {
-            ensureTodayKeys();
+            ensureTodayKeys(); // también gestiona récord en el cambio de día
+
+            SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
 
             if (!usingDetector && event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
                 float totalSinceBoot = event.values[0];
-                if (baseOffset < 0f) {
-                    baseOffset = totalSinceBoot;
-                    saveBase(baseOffset);
+
+                // detectar reinicio del contador (reboot)
+                float lastCounter = prefs.getFloat(KEY_LAST_COUNTER, -1f);
+                String lastDay    = prefs.getString(KEY_LAST_COUNTER_DAY, "");
+                if (lastCounter >= 0f && totalSinceBoot < lastCounter) {
+                    float recalib = totalSinceBoot - stepsToday;
+                    if (recalib < 0f) recalib = 0f;
+                    baseOffset = recalib;
+                    prefs.edit().putFloat(keyBaseToday, baseOffset).apply();
                 }
+
+                if (baseOffset < 0f) {
+                    baseOffset = totalSinceBoot - stepsToday;
+                    if (baseOffset < 0f) baseOffset = totalSinceBoot;
+                    prefs.edit().putFloat(keyBaseToday, baseOffset).apply();
+                }
+
                 long val = Math.max(0L, Math.round(totalSinceBoot - baseOffset));
                 if (val != stepsToday) {
                     stepsToday = val;
                     saveToday(stepsToday);
                     emitUpdate();
                 }
+
+                prefs.edit()
+                        .putFloat(KEY_LAST_COUNTER, totalSinceBoot)
+                        .putString(KEY_LAST_COUNTER_DAY, dayCode())
+                        .apply();
                 return;
             }
 
@@ -140,34 +171,34 @@ public class StepsManager {
     private void emitUpdate() {
         final long s = stepsToday;
         final double km = round2(s * METROS_POR_PASO / 1000.0);
-        mainHandler.post(() -> {
-            if (callback != null) callback.onStepsUpdated(s, km);
-        });
+        mainHandler.post(() -> { if (callback != null) callback.onStepsUpdated(s, km); });
     }
 
-    private String todayKey(String prefix) {
-        String ymd = new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date());
-        return prefix + ymd;
+    private String todayKey(String prefix) { return prefix + dayCode(); }
+    private String dayCode() {
+        return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date());
     }
 
+    /** Si cambia el día, persiste récord local y resetea conteos para hoy. */
     private void ensureTodayKeys() {
         String expectedBase = todayKey(KEY_BASE_PREFIX);
         if (!expectedBase.equals(keyBaseToday)) {
-            // Cambió el día: reseteamos claves y valores locales
+            // guardar récord local si corresponde
+            SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
+            long record = prefs.getLong(KEY_RECORD_STEPS, 0L);
+            if (stepsToday > record) {
+                prefs.edit()
+                        .putLong(KEY_RECORD_STEPS, stepsToday)
+                        .putString(KEY_RECORD_DAY, dayCode())
+                        .apply();
+            }
+            // nuevo día
             keyBaseToday  = expectedBase;
             keyTotalToday = todayKey(KEY_TOTAL_PREFIX);
             baseOffset = -1f;
             stepsToday = 0L;
-            appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).edit()
-                    .remove(keyTotalToday)   // limpiar total del nuevo día (por si existía)
-                    .remove(expectedBase)    // asegurar recalibración del baseOffset
-                    .apply();
+            prefs.edit().remove(keyTotalToday).apply();
         }
-    }
-
-    private void saveBase(float v) {
-        appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).edit()
-                .putFloat(keyBaseToday, v).apply();
     }
 
     private void saveToday(long steps) {

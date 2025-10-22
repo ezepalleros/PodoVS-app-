@@ -19,7 +19,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QuerySnapshot;
@@ -78,7 +77,6 @@ public class MainActivity extends AppCompatActivity {
         tvKmSemanaSmall = findViewById(R.id.tvKmSemanaSmall);
         ivAvatar        = findViewById(R.id.ivAvatar);
         tvCoins         = findViewById(R.id.tvCoins);
-        // Mientras carga Firestore mostramos la piel base si existe, sino el placeholder.
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
         ivAvatar.setOnClickListener(v ->
@@ -97,8 +95,9 @@ public class MainActivity extends AppCompatActivity {
         repo = new FirestoreRepo();
         db   = FirebaseFirestore.getInstance();
 
-        // idempotente: si falta el pack inicial, lo crea
         repo.addStarterPackIfMissing(uid, v -> {}, e -> {});
+        // *** TODA la normalización de BDD la hace el repo (borra km_hoy y asegura usu_stats) ***
+        repo.ensureStats(uid);
 
         // Inicializa clave de fecha si viene vacía
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
@@ -118,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
                 if (saldo != null && tvCoins != null) {
                     tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
                 }
-                // km semana
+                // km semana (dentro de usu_stats)
                 Double kmSemana = getNestedDouble(snap, "usu_stats.km_semana");
                 if (kmSemana != null) {
                     kmSemanaCache = kmSemana;
@@ -135,16 +134,11 @@ public class MainActivity extends AppCompatActivity {
         long pasosGuardados = sp.getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosGuardados));
 
-        // StepsManager: callback actualiza pasos locales y sube km_hoy
+        // StepsManager: SOLO local -> UI
         stepsManager = new StepsManager(this, /*db=*/null, /*userId=*/0L, (stepsToday, kmHoy) -> {
             SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
             prefs.edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
-
             tvKmTotalBig.setText(String.valueOf(stepsToday));
-
-            if (uid != null) {
-                repo.setKmHoy(uid, kmHoy, v -> {}, e -> Log.w(TAG, "setKmHoy error: " + e.getMessage()));
-            }
         });
 
         // --- Clicks de la fila superior ---
@@ -279,6 +273,8 @@ public class MainActivity extends AppCompatActivity {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
     }
 
+    /** Rollover diario: suma km al semanal en Firestore y resetea pasos locales.
+     *  También sincroniza 'mayor_pasos_dia' si se batió el récord local. */
     private void maybeRunRollover() {
         if (uid == null) return;
 
@@ -291,11 +287,12 @@ public class MainActivity extends AppCompatActivity {
         long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
         double kmAgregar = pasosHoy * STEP_TO_KM;
 
-        // Suma al semanal y limpia el día en Firestore usando el cache local
+        // Suma al semanal en Firestore usando cache local
         double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
-
         repo.setKmSemana(uid, nuevoSem, v -> {}, e -> Log.w(TAG, "setKmSemana error: " + e.getMessage()));
-        repo.setKmHoy(uid, 0.0, v -> {}, e -> Log.w(TAG, "setKmHoy(0) error: " + e.getMessage()));
+
+        // récord (BDD -> repo)
+        repo.updateMayorPasosDiaIfGreater(uid, pasosHoy);
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
         if (diasContados >= 7) {
@@ -340,7 +337,6 @@ public class MainActivity extends AppCompatActivity {
         String zapasId    = asString(snap.get("usu_equipped.usu_zapas"));
         String cabezaId   = asString(snap.get("usu_equipped.usu_cabeza"));
 
-        // Si no hay nada equipado aún, mostramos la piel_startskin si existe
         if (pielId == null && pantalonId == null && remeraId == null
                 && zapasId == null && cabezaId == null) {
             int fallback = getResIdByName("piel_startskin");
@@ -348,7 +344,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Leemos UNA VEZ la subcolección para mapear cos_id -> asset local
         db.collection("users").document(uid).collection("my_cosmetics")
                 .get()
                 .addOnSuccessListener(qs -> buildAvatarFromMyCosmetics(qs, pielId, pantalonId, remeraId, zapasId, cabezaId))
@@ -369,9 +364,7 @@ public class MainActivity extends AppCompatActivity {
         String zapasAsset    = findAssetFor(qs, zapasId);
         String cabezaAsset   = findAssetFor(qs, cabezaId);
 
-        // Construimos la lista de drawables en orden de pintura (back -> front)
         ArrayList<Drawable> layers = new ArrayList<>();
-
         addLayerIfExists(layers, pielAsset);      // base
         addLayerIfExists(layers, pantAsset);      // pantalón
         addLayerIfExists(layers, remeraAsset);    // remera
@@ -379,7 +372,6 @@ public class MainActivity extends AppCompatActivity {
         addLayerIfExists(layers, cabezaAsset);    // gorra/sombrero
 
         if (layers.isEmpty()) {
-            // fallback si algo raro pasó
             int def = getResIdByName("piel_startskin");
             if (def != 0) ivAvatar.setImageResource(def);
             return;
@@ -419,6 +411,4 @@ public class MainActivity extends AppCompatActivity {
     private int getResIdByName(String name) {
         return getResources().getIdentifier(name, "drawable", getPackageName());
     }
-
-
 }

@@ -85,7 +85,7 @@ public class FirestoreRepo {
         userDoc(uid).get().addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    /** Crea el perfil con metas por defecto (1000/10000) y km_semana=0. */
+    /** Crea el perfil con metas por defecto (1000/10000) y esquema de usu_stats sin km_hoy. */
     public void initUserProfile(@NonNull String uid,
                                 @NonNull String nombre,
                                 @NonNull String dif,
@@ -98,13 +98,23 @@ public class FirestoreRepo {
         data.put("usu_difi", dif.toLowerCase());
 
         Map<String, Object> stats = new HashMap<>();
-        stats.put("km_hoy", 0.0);
+        // Distancias
         stats.put("km_semana", 0.0);
-        stats.put("km_total", 0.0);
+        stats.put("km_total",  0.0);
+        // Progresión
         stats.put("xp", 0L);
         stats.put("objetos_comprados", 0L);
-        stats.put("meta_diaria_pasos", 1000L);
+        // Metas configurables
+        stats.put("meta_diaria_pasos",  1000L);
         stats.put("meta_semanal_pasos", 10000L);
+        // NUEVOS ACUMULADORES / RÉCORDS
+        stats.put("carreras_ganadas",      0L);
+        stats.put("eventos_participados",  0L);
+        stats.put("mejor_posicion",        0L); // si manejás “mejor puesto” como número (1 es mejor)
+        stats.put("mayor_pasos_dia",       0L);
+        stats.put("metas_diarias_total",   0L);
+        stats.put("metas_semana_total",    0L);
+
         data.put("usu_stats", stats);
 
         Map<String, Object> eq = new HashMap<>();
@@ -120,10 +130,38 @@ public class FirestoreRepo {
                 .addOnFailureListener(err);
     }
 
+    /** Garantiza el esquema de usu_stats, agrega faltantes y ELIMINA km_hoy si existiera. */
+    public void ensureStats(@NonNull String uid) {
+        DocumentReference ref = userDoc(uid);
+        ref.get().addOnSuccessListener(snap -> {
+            Map<String, Object> up = new HashMap<>();
+            // borrar km_hoy (por si existiera aún)
+            up.put("usu_stats.km_hoy", FieldValue.delete());
+
+            ensureMissingDouble(snap, up, "usu_stats.km_semana",           0.0d);
+            ensureMissingDouble(snap, up, "usu_stats.km_total",            0.0d);
+            ensureMissingLong  (snap, up, "usu_stats.xp",                  0L);
+            ensureMissingLong  (snap, up, "usu_stats.objetos_comprados",   0L);
+            ensureMissingLong  (snap, up, "usu_stats.meta_diaria_pasos",   1000L);
+            ensureMissingLong  (snap, up, "usu_stats.meta_semanal_pasos",  10000L);
+
+            // nuevos
+            ensureMissingLong  (snap, up, "usu_stats.carreras_ganadas",     0L);
+            ensureMissingLong  (snap, up, "usu_stats.eventos_participados", 0L);
+            ensureMissingLong  (snap, up, "usu_stats.mejor_posicion",       0L);
+            ensureMissingLong  (snap, up, "usu_stats.mayor_pasos_dia",      0L);
+            ensureMissingLong  (snap, up, "usu_stats.metas_diarias_total",  0L);
+            ensureMissingLong  (snap, up, "usu_stats.metas_semana_total",   0L);
+
+            if (!up.isEmpty()) ref.set(up, SetOptions.merge());
+        });
+    }
+
     // ---------- Ranking ----------
+    /** “Ranking hoy” ahora muestra por récord personal (mayor_pasos_dia) ya que no hay km_hoy. */
     public Query rankingHoy() {
         return db.collection("users")
-                .orderBy("usu_stats.km_hoy", Query.Direction.DESCENDING)
+                .orderBy("usu_stats.mayor_pasos_dia", Query.Direction.DESCENDING)
                 .limit(50);
     }
     public Query rankingSemana() {
@@ -146,13 +184,7 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---------- Stats básicos ----------
-    public void setKmHoy(@NonNull String uid, double km,
-                         @NonNull OnSuccessListener<Void> ok,
-                         @NonNull OnFailureListener err) {
-        userDoc(uid).update("usu_stats.km_hoy", km)
-                .addOnSuccessListener(ok).addOnFailureListener(err);
-    }
+    // ---------- Stats (sin km_hoy) ----------
     public void setKmSemana(@NonNull String uid, double km,
                             @NonNull OnSuccessListener<Void> ok,
                             @NonNull OnFailureListener err) {
@@ -164,6 +196,22 @@ public class FirestoreRepo {
                            @NonNull OnFailureListener err) {
         userDoc(uid).update("usu_stats.km_total", km)
                 .addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    /** Actualiza mayor_pasos_dia sólo si el candidato es mayor al actual. */
+    public void updateMayorPasosDiaIfGreater(@NonNull String uid, long candidate) {
+        DocumentReference ref = userDoc(uid);
+        db.runTransaction(tr -> {
+            DocumentSnapshot s = tr.get(ref);
+            Object v = s.get("usu_stats.mayor_pasos_dia");
+            long cur = (v instanceof Number) ? ((Number) v).longValue() : 0L;
+            if (candidate > cur) {
+                Map<String, Object> m = new HashMap<>();
+                m.put("usu_stats.mayor_pasos_dia", candidate);
+                tr.set(ref, m, SetOptions.merge());
+            }
+            return null;
+        });
     }
 
     // ---------- Metas ----------
@@ -211,7 +259,7 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---------- Recompensas ----------
+    // ---------- Recompensas / Logros ----------
     public void onDailyGoalReached(@NonNull String uid,
                                    @NonNull OnSuccessListener<Void> ok,
                                    @NonNull OnFailureListener err) {
@@ -219,7 +267,8 @@ public class FirestoreRepo {
             Map<String, Object> m = new HashMap<>();
             m.put("usu_saldo", FieldValue.increment(50));
             m.put("usu_stats.xp", FieldValue.increment(25));
-            m.put("usu_stats.metas_diarias_cumplidas", FieldValue.increment(1));
+            // nuevo contador total (reemplaza metas_diarias_cumplidas)
+            m.put("usu_stats.metas_diarias_total", FieldValue.increment(1));
             tr.update(userDoc(uid), m);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
@@ -232,10 +281,43 @@ public class FirestoreRepo {
             Map<String, Object> m = new HashMap<>();
             m.put("usu_saldo", FieldValue.increment(250));
             m.put("usu_stats.xp", FieldValue.increment(100));
-            m.put("usu_stats.metas_semanales_cumplidas", FieldValue.increment(1));
+            // nuevo contador total (reemplaza metas_semanales_cumplidas)
+            m.put("usu_stats.metas_semana_total", FieldValue.increment(1));
             tr.update(userDoc(uid), m);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    /** Conviene exponer helpers para actualizar estos nuevos acumuladores: */
+    public void addCarreraGanada(@NonNull String uid,
+                                 @NonNull OnSuccessListener<Void> ok,
+                                 @NonNull OnFailureListener err) {
+        userDoc(uid).update("usu_stats.carreras_ganadas", FieldValue.increment(1))
+                .addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    public void addEventoParticipado(@NonNull String uid,
+                                     @NonNull OnSuccessListener<Void> ok,
+                                     @NonNull OnFailureListener err) {
+        userDoc(uid).update("usu_stats.eventos_participados", FieldValue.increment(1))
+                .addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    /** Guarda la mejor posición alcanzada si es menor (1 es mejor). */
+    public void updateMejorPosicionIfBetter(@NonNull String uid, long posicion) {
+        DocumentReference ref = userDoc(uid);
+        db.runTransaction(tr -> {
+            DocumentSnapshot s = tr.get(ref);
+            Object v = s.get("usu_stats.mejor_posicion");
+            long cur = (v instanceof Number) ? ((Number) v).longValue() : 0L;
+            // si cur==0 significa sin dato, o si posicion < cur mejora
+            if (cur == 0L || (posicion > 0 && posicion < cur)) {
+                Map<String, Object> m = new HashMap<>();
+                m.put("usu_stats.mejor_posicion", posicion);
+                tr.set(ref, m, SetOptions.merge());
+            }
+            return null;
+        });
     }
 
     // ---------- Inventario / Cosméticos ----------
@@ -350,7 +432,7 @@ public class FirestoreRepo {
         return userDoc(uid).addSnapshotListener(listener);
     }
 
-    // ---------- Claims ----------
+    // ---------- Claims / Recompensas rápidas ----------
     public void claimDaily(@NonNull String uid, long coins,
                            @NonNull OnSuccessListener<Void> ok,
                            @NonNull OnFailureListener err) {
@@ -358,7 +440,7 @@ public class FirestoreRepo {
             Map<String, Object> m = new HashMap<>();
             m.put("usu_saldo", FieldValue.increment(coins));
             m.put("usu_stats.xp", FieldValue.increment(25));
-            m.put("usu_stats.metas_diarias_cumplidas", FieldValue.increment(1));
+            m.put("usu_stats.metas_diarias_total", FieldValue.increment(1));
             tr.update(userDoc(uid), m);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
@@ -371,9 +453,22 @@ public class FirestoreRepo {
             Map<String, Object> m = new HashMap<>();
             m.put("usu_saldo", FieldValue.increment(coins));
             m.put("usu_stats.xp", FieldValue.increment(100));
-            m.put("usu_stats.metas_semanales_cumplidas", FieldValue.increment(1));
+            m.put("usu_stats.metas_semana_total", FieldValue.increment(1));
             tr.update(userDoc(uid), m);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    // ===== Helpers =====
+    private void ensureMissingLong(DocumentSnapshot s, Map<String, Object> up,
+                                   String dotted, long def) {
+        Object v = s.get(dotted);
+        if (!(v instanceof Number)) up.put(dotted, def);
+    }
+
+    private void ensureMissingDouble(DocumentSnapshot s, Map<String, Object> up,
+                                     String dotted, double def) {
+        Object v = s.get(dotted);
+        if (!(v instanceof Number)) up.put(dotted, def);
     }
 }
