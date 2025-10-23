@@ -228,8 +228,5 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
         </LinearLayout>
-
-        <!-- Hitos / Próximamente -->
-
     </LinearLayout>
 </ScrollView>

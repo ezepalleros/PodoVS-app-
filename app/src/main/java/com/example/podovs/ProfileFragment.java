@@ -56,11 +56,12 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     private static final LinkedHashMap<String, String> METRIC_TITLES = new LinkedHashMap<>();
     static {
         METRIC_TITLES.put("usu_stats.km_total", "Km recorridos");
-        METRIC_TITLES.put("usu_stats.objetos_comprados", "Objetos comprados");
-        METRIC_TITLES.put("usu_stats.metas_diarias_cumplidas", "Metas diarias OK");
-        METRIC_TITLES.put("usu_stats.metas_semanales_cumplidas", "Metas semanales OK");
         METRIC_TITLES.put("usu_stats.km_semana", "Km esta semana");
-        METRIC_TITLES.put("usu_stats.km_hoy", "Km hoy");
+        METRIC_TITLES.put("usu_stats.objetos_comprados", "Objetos comprados");
+        METRIC_TITLES.put("usu_stats.metas_diarias_total", "Metas diarias OK (total)");
+        METRIC_TITLES.put("usu_stats.metas_semana_total", "Metas semanales OK (total)");
+        METRIC_TITLES.put("usu_stats.mayor_pasos_dia", "Récord de pasos (día)");
+        // 🔁 Eliminados: metas_diarias_cumplidas, metas_semanales_cumplidas, km_hoy (legacy)
     }
 
     public ProfileFragment() {}
@@ -171,7 +172,7 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         for (String key : METRIC_TITLES.keySet()) {
             Object v = snap.get(key);
             if (v == null) {
-                if (key.endsWith("km_total") || key.endsWith("km_semana") || key.endsWith("km_hoy")) {
+                if (key.endsWith("km_total") || key.endsWith("km_semana")) {
                     map.put(key, 0.0);
                 } else {
                     map.put(key, 0L);
@@ -189,7 +190,7 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     }
 
     private String formatValue(String key, Object value) {
-        if (key.endsWith("km_total") || key.endsWith("km_semana") || key.endsWith("km_hoy")) {
+        if (key.endsWith("km_total") || key.endsWith("km_semana")) {
             double km = (value instanceof Number) ? ((Number) value).doubleValue() : 0d;
             return String.format(Locale.getDefault(), "%.2f", km);
         }
@@ -281,8 +282,8 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         }
 
         // 3) Escalar con vecino más cercano a ~96dp de alto (factor entero)
-        final int targetHpx = dpToPx(96);                // <-- ajustá aquí si querés más chico
-        int factor = Math.max(1, targetHpx / baseH);     // sin filtros, pixel-perfect
+        final int targetHpx = dpToPx(96);
+        int factor = Math.max(1, targetHpx / baseH);
 
         int outW = baseW * factor;
         int outH = baseH * factor;

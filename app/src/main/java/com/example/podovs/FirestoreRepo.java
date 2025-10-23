@@ -135,17 +135,20 @@ public class FirestoreRepo {
         DocumentReference ref = userDoc(uid);
         ref.get().addOnSuccessListener(snap -> {
             Map<String, Object> up = new HashMap<>();
-            // borrar km_hoy (por si existiera aún)
-            up.put("usu_stats.km_hoy", FieldValue.delete());
 
-            ensureMissingDouble(snap, up, "usu_stats.km_semana",           0.0d);
-            ensureMissingDouble(snap, up, "usu_stats.km_total",            0.0d);
-            ensureMissingLong  (snap, up, "usu_stats.xp",                  0L);
-            ensureMissingLong  (snap, up, "usu_stats.objetos_comprados",   0L);
-            ensureMissingLong  (snap, up, "usu_stats.meta_diaria_pasos",   1000L);
-            ensureMissingLong  (snap, up, "usu_stats.meta_semanal_pasos",  10000L);
+            // ---- Borrar legados dentro de usu_stats ----
+            up.put("usu_stats.km_hoy", FieldValue.delete());                  // legacy
+            up.put("usu_stats.metas_diarias_cumplidas", FieldValue.delete()); // legacy
+            up.put("usu_stats.metas_semanales_cumplidas", FieldValue.delete());// legacy
 
-            // nuevos
+            // ---- Asegurar campos actuales ----
+            ensureMissingDouble(snap, up, "usu_stats.km_semana",          0.0d);
+            ensureMissingDouble(snap, up, "usu_stats.km_total",           0.0d);
+            ensureMissingLong  (snap, up, "usu_stats.xp",                 0L);
+            ensureMissingLong  (snap, up, "usu_stats.objetos_comprados",  0L);
+            ensureMissingLong  (snap, up, "usu_stats.meta_diaria_pasos",  1000L);
+            ensureMissingLong  (snap, up, "usu_stats.meta_semanal_pasos", 10000L);
+
             ensureMissingLong  (snap, up, "usu_stats.carreras_ganadas",     0L);
             ensureMissingLong  (snap, up, "usu_stats.eventos_participados", 0L);
             ensureMissingLong  (snap, up, "usu_stats.mejor_posicion",       0L);
@@ -153,7 +156,7 @@ public class FirestoreRepo {
             ensureMissingLong  (snap, up, "usu_stats.metas_diarias_total",  0L);
             ensureMissingLong  (snap, up, "usu_stats.metas_semana_total",   0L);
 
-            if (!up.isEmpty()) ref.set(up, SetOptions.merge());
+            if (!up.isEmpty()) ref.update(up);
         });
     }
 
@@ -206,12 +209,38 @@ public class FirestoreRepo {
             Object v = s.get("usu_stats.mayor_pasos_dia");
             long cur = (v instanceof Number) ? ((Number) v).longValue() : 0L;
             if (candidate > cur) {
-                Map<String, Object> m = new HashMap<>();
-                m.put("usu_stats.mayor_pasos_dia", candidate);
-                tr.set(ref, m, SetOptions.merge());
+                tr.update(ref, "usu_stats.mayor_pasos_dia", candidate); // <-- update (no set)
             }
             return null;
         });
+    }
+
+    public void addKmDelta(@NonNull String uid, double kmDelta,
+                           @NonNull OnSuccessListener<Void> ok,
+                           @NonNull OnFailureListener err) {
+        if (kmDelta <= 0) { ok.onSuccess(null); return; }
+
+        DocumentReference ref = userDoc(uid);
+        db.runTransaction((Transaction.Function<Void>) tr -> {   // <-- fuerza TResult = Void
+                    DocumentSnapshot s = tr.get(ref);
+
+                    double curSem = 0.0, curTot = 0.0;
+                    Object vs = s.get("usu_stats.km_semana");
+                    Object vt = s.get("usu_stats.km_total");
+                    if (vs instanceof Number) curSem = ((Number) vs).doubleValue();
+                    if (vt instanceof Number) curTot = ((Number) vt).doubleValue();
+
+                    double newSem = Math.max(0.0, curSem + kmDelta);
+                    double newTot = Math.max(0.0, curTot + kmDelta);
+
+                    Map<String, Object> up = new HashMap<>();
+                    up.put("usu_stats.km_semana", newSem);
+                    up.put("usu_stats.km_total",  newTot);
+                    tr.update(ref, up);
+                    return null; // Void
+                })
+                .addOnSuccessListener(unused -> ok.onSuccess(null)) // <-- adapta Void
+                .addOnFailureListener(err);
     }
 
     // ---------- Metas ----------
@@ -431,6 +460,8 @@ public class FirestoreRepo {
                                            @NonNull EventListener<DocumentSnapshot> listener) {
         return userDoc(uid).addSnapshotListener(listener);
     }
+
+
 
     // ---------- Claims / Recompensas rápidas ----------
     public void claimDaily(@NonNull String uid, long coins,

@@ -17,6 +17,10 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.AuthResult;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 public class RegisterActivity extends AppCompatActivity {
 
     private EditText etNombre, etEmail, etPassword;
@@ -33,6 +37,15 @@ public class RegisterActivity extends AppCompatActivity {
     private static final int COL_HARD   = 0xFFF44336;
 
     private String onboardingUid = null; // si viene desde Login (no existe doc)
+
+    // Prefs usados por MainActivity (mismo esquema)
+    private static final String PREFS_GLOBAL = "podovs_global";
+    private static final String KEY_LAST_UID = "last_uid";
+    private static final String PREFS_PREFIX = "podovs_prefs_";
+    private static final String KEY_PASOS_HOY = "pasos_hoy";
+    private static final String KEY_ULTIMO_DIA = "ultimo_dia";
+    private static final String KEY_DIAS_CONTADOS = "dias_contados";
+    private static final String KEY_FIRST_LOGIN_DONE = "first_login_done";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,7 +143,10 @@ public class RegisterActivity extends AppCompatActivity {
             repo.initUserProfile(onboardingUid, nombre, dif,
                     v -> repo.addStarterPackIfMissing(
                             onboardingUid,
-                            vv -> { saveSessionAndGo(onboardingUid, nombre); },
+                            vv -> {
+                                initLocalPrefsFor(onboardingUid); // evita heredar pasos
+                                saveSessionAndGo(onboardingUid, nombre);
+                            },
                             e2 -> { btnCrearCuenta.setEnabled(true);
                                 Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show(); }
                     ),
@@ -145,7 +161,7 @@ public class RegisterActivity extends AppCompatActivity {
                 Toast.makeText(this, "Completá email y contraseña.", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // Crea cuenta y luego perfil + starter pack
+            // Crea cuenta y luego perfil + starter pack (TIP aplicado)
             repo.createUser(email, pass,
                     (AuthResult r) -> {
                         String uid = (r.getUser() != null) ? r.getUser().getUid() : null;
@@ -157,7 +173,10 @@ public class RegisterActivity extends AppCompatActivity {
                         repo.initUserProfile(uid, nombre, dif,
                                 v -> repo.addStarterPackIfMissing(
                                         uid,
-                                        vv -> { saveSessionAndGo(uid, nombre); },
+                                        vv -> {
+                                            initLocalPrefsFor(uid); // configura prefs por usuario en 0
+                                            saveSessionAndGo(uid, nombre);
+                                        },
                                         e2 -> { btnCrearCuenta.setEnabled(true);
                                             Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show(); }
                                 ),
@@ -175,9 +194,24 @@ public class RegisterActivity extends AppCompatActivity {
         }
     }
 
-    private void clearLocalSteps() {
-        getSharedPreferences("steps_prefs", MODE_PRIVATE).edit().clear().apply();
-        getSharedPreferences("podovs_prefs", MODE_PRIVATE).edit().clear().apply();
+    // --- Prefs locales para aislar pasos por usuario (coincide con MainActivity) ---
+    private void initLocalPrefsFor(String uid) {
+        // marcar último uid
+        getSharedPreferences(PREFS_GLOBAL, MODE_PRIVATE)
+                .edit().putString(KEY_LAST_UID, uid).apply();
+
+        // inicializar el namespace de prefs del usuario
+        SharedPreferences up = getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE);
+        up.edit()
+                .putString(KEY_ULTIMO_DIA, todayString())
+                .putLong(KEY_PASOS_HOY, 0L)
+                .putInt(KEY_DIAS_CONTADOS, 0)
+                .putBoolean(KEY_FIRST_LOGIN_DONE, true) // evita rollover el primer arranque
+                .apply();
+    }
+
+    private String todayString() {
+        return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
     }
 
     private void saveSessionAndGo(String uid, String nombre) {
@@ -187,4 +221,3 @@ public class RegisterActivity extends AppCompatActivity {
         finish();
     }
 }
-

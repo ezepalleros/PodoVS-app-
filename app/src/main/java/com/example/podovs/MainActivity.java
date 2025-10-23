@@ -32,29 +32,38 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
 
-    private TextView tvKmTotalBig;     // PASOS HOY (número grande)
+    // ==== UI ====
+    private TextView tvKmTotalBig;     // PASOS HOY (número grande) -> ahora son pasos
     private TextView tvKmSemanaSmall;  // "Semana: xx.xx km"
     private ImageView ivAvatar;
-
-    // Contador de monedas
     private TextView tvCoins;
 
-    // >>> Firestore <<<
+    // ==== Firestore / Repo ====
     private FirestoreRepo repo;
     private FirebaseFirestore db;
     private String uid = null;
 
-    // >>> Steps <<<
+    // ==== Steps ====
     private StepsManager stepsManager;
 
-    // ---- Rollover diario/semana (cache local de pasos) ----
+    // ==== Prefs (aislados por usuario) ====
     private static final double STEP_TO_KM = 0.0008; // 1 paso ~ 0.8 m
-    private static final String PREFS = "podovs_prefs";
-    private static final String KEY_PASOS_HOY = "pasos_hoy"; // guardado como LONG
+
+    private static final String PREFS_GLOBAL = "podovs_global";
+    private static final String KEY_LAST_UID = "last_uid";
+
+    private static final String PREFS_PREFIX = "podovs_prefs_";
+    private static final String KEY_PASOS_HOY = "pasos_hoy"; // LONG
     private static final String KEY_ULTIMO_DIA = "ultimo_dia";
     private static final String KEY_DIAS_CONTADOS = "dias_contados";
+    private static final String KEY_FIRST_LOGIN_DONE = "first_login_done";
 
-    // cache leída desde Firestore (para evitar lecturas extra en cada rollover)
+    private SharedPreferences userPrefs() {
+        // prefs por usuario -> evita mezclar datos entre sesiones
+        return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE);
+    }
+
+    // cache del servidor para semana
     private double kmSemanaCache = 0.0;
 
     private final ActivityResultLauncher<String[]> permsLauncher =
@@ -91,19 +100,16 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // ==== Aislar prefs por usuario y resetear si cambió ====
+        ensurePerUserPrefsInitialized();
+
         // ==== Repo Firestore ====
         repo = new FirestoreRepo();
         db   = FirebaseFirestore.getInstance();
 
         repo.addStarterPackIfMissing(uid, v -> {}, e -> {});
-        // *** TODA la normalización de BDD la hace el repo (borra km_hoy y asegura usu_stats) ***
+        // Normaliza estructura de stats (borra legacy, asegura campos)
         repo.ensureStats(uid);
-
-        // Inicializa clave de fecha si viene vacía
-        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
-        if (!sp.contains(KEY_ULTIMO_DIA)) {
-            sp.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
-        }
 
         // Listener del documento del usuario (saldo, km semana, equipamiento, etc.)
         repo.listenUser(uid, (snap, err) -> {
@@ -131,13 +137,12 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // Mostrar pasos guardados (persistidos en prefs por el steps callback)
-        long pasosGuardados = sp.getLong(KEY_PASOS_HOY, 0L);
+        long pasosGuardados = userPrefs().getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosGuardados));
 
         // StepsManager: SOLO local -> UI
         stepsManager = new StepsManager(this, /*db=*/null, /*userId=*/0L, (stepsToday, kmHoy) -> {
-            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-            prefs.edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
+            userPrefs().edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
             tvKmTotalBig.setText(String.valueOf(stepsToday));
         });
 
@@ -149,22 +154,25 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopOptions).setOnClickListener(v ->
                 Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
-        // Si algún fragmento cambió monedas, Firestore nos actualizará por listener.
         getSupportFragmentManager().setFragmentResultListener(
                 "coins_changed", this, (requestKey, bundle) -> { /* no-op */ }
         );
 
         requestRuntimePermissions();
-        // Hacer rollover si cambió la fecha antes de mostrar
-        maybeRunRollover();
-        // Refrescar UI luego del posible rollover
+
+        // Si no es el primer login en este dispositivo para este uid, permitir rollover
+        if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) {
+            maybeRunRollover();
+        }
         updateSmallWeekAndBigStepsFromStorage();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        maybeRunRollover();
+        if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) {
+            maybeRunRollover();
+        }
         updateSmallWeekAndBigStepsFromStorage();
         secureStartSteps();
     }
@@ -181,6 +189,35 @@ public class MainActivity extends AppCompatActivity {
         secureStopSteps();
     }
 
+    // ==== Prefs por usuario ====
+    private void ensurePerUserPrefsInitialized() {
+        // detectar cambio de usuario en este dispositivo
+        SharedPreferences global = getSharedPreferences(PREFS_GLOBAL, MODE_PRIVATE);
+        String lastUid = global.getString(KEY_LAST_UID, null);
+        if (!uid.equals(lastUid)) {
+            // Nuevo usuario en el dispositivo -> resetear sus prefs locales
+            SharedPreferences up = userPrefs();
+            up.edit()
+                    .putString(KEY_ULTIMO_DIA, todayString())
+                    .putLong(KEY_PASOS_HOY, 0L)
+                    .putInt(KEY_DIAS_CONTADOS, 0)
+                    .putBoolean(KEY_FIRST_LOGIN_DONE, true)
+                    .apply();
+
+            global.edit().putString(KEY_LAST_UID, uid).apply();
+        } else {
+            // Asegurar que existen claves básicas
+            SharedPreferences up = userPrefs();
+            if (!up.contains(KEY_ULTIMO_DIA)) {
+                up.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
+            }
+            if (!up.contains(KEY_FIRST_LOGIN_DONE)) {
+                up.edit().putBoolean(KEY_FIRST_LOGIN_DONE, true).apply();
+            }
+        }
+    }
+
+    // ==== Navegación ====
     private void openGoalsFragment() {
         getSupportFragmentManager()
                 .beginTransaction()
@@ -219,6 +256,7 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
+    // ====== Permisos ======
     private void requestRuntimePermissions() {
         ArrayList<String> req = new ArrayList<>();
 
@@ -239,8 +277,6 @@ public class MainActivity extends AppCompatActivity {
             secureStartSteps();
         }
     }
-
-    // ====== Helpers de permisos/seguridad ======
 
     private boolean ensureARGranted() {
         return !(Build.VERSION.SDK_INT >= 29) ||
@@ -267,8 +303,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ==== Helpers de rollover y UI ====
-
+    // ==== Rollover y UI ====
     private String todayString() {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
     }
@@ -278,7 +313,7 @@ public class MainActivity extends AppCompatActivity {
     private void maybeRunRollover() {
         if (uid == null) return;
 
-        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        SharedPreferences sp = userPrefs();
         String last = sp.getString(KEY_ULTIMO_DIA, "");
         String today = todayString();
 
@@ -291,7 +326,7 @@ public class MainActivity extends AppCompatActivity {
         double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
         repo.setKmSemana(uid, nuevoSem, v -> {}, e -> Log.w(TAG, "setKmSemana error: " + e.getMessage()));
 
-        // récord (BDD -> repo)
+        // récord
         repo.updateMayorPasosDiaIfGreater(uid, pasosHoy);
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
@@ -314,8 +349,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateSmallWeekAndBigStepsFromStorage() {
-        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
-        long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
+        long pasosHoy = userPrefs().getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosHoy));
         tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", kmSemanaCache));
     }
@@ -328,8 +362,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ===================== AVATAR =====================
-
-    /** Lee los cos_id equipados del doc del usuario y arma el avatar. */
     private void renderAvatarFromUserSnapshot(DocumentSnapshot snap) {
         String pielId     = asString(snap.get("usu_equipped.usu_piel"));
         String pantalonId = asString(snap.get("usu_equipped.usu_pantalon"));
@@ -350,7 +382,6 @@ public class MainActivity extends AppCompatActivity {
                 .addOnFailureListener(e -> Log.w(TAG, "my_cosmetics get() error: " + e.getMessage()));
     }
 
-    /** Construye y setea el LayerDrawable respetando el orden de capas. */
     private void buildAvatarFromMyCosmetics(QuerySnapshot qs,
                                             @Nullable String pielId,
                                             @Nullable String pantalonId,
@@ -382,8 +413,6 @@ public class MainActivity extends AppCompatActivity {
         ivAvatar.setAdjustViewBounds(true);
     }
 
-    // ---- helpers avatar ----
-
     @Nullable
     private String asString(Object o) {
         return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null;
@@ -412,3 +441,4 @@ public class MainActivity extends AppCompatActivity {
         return getResources().getIdentifier(name, "drawable", getPackageName());
     }
 }
+

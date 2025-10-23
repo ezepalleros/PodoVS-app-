@@ -27,7 +27,7 @@ public class StatsFragment extends Fragment {
     private TextView tvCarrerasGanadas;
     private TextView tvObjetosComprados;
     private TextView tvEventosParticipados;
-    private TextView tvMejorPosicionMensual;
+    private TextView tvMejorPosicionMensual; // muestra mejor_posicion (1 = mejor)
     private TextView tvMetasDiariasOk;
     private TextView tvMetasSemanalesOk;
 
@@ -135,23 +135,23 @@ public class StatsFragment extends Fragment {
         long objetosComprados = getLong(snap, "usu_stats.objetos_comprados", 0L);
         tvObjetosComprados.setText(String.valueOf(objetosComprados));
 
-        // metas cumplidas
-        long metasDiariasOk = getLong(snap, "usu_stats.metas_diarias_cumplidas", 0L);
-        long metasSemanalesOk = getLong(snap, "usu_stats.metas_semanales_cumplidas", 0L);
+        // metas (usar claves nuevas *_total)
+        long metasDiariasOk  = getLong(snap, "usu_stats.metas_diarias_total", 0L);
+        long metasSemanalesOk = getLong(snap, "usu_stats.metas_semana_total", 0L);
         tvMetasDiariasOk.setText(String.valueOf(metasDiariasOk));
         tvMetasSemanalesOk.setText(String.valueOf(metasSemanalesOk));
 
-        // carreras ganadas (si no lo tenés aún en Firestore, quedará 0)
+        // carreras ganadas
         long carrerasGanadas = getLong(snap, "usu_stats.carreras_ganadas", 0L);
         tvCarrerasGanadas.setText(String.valueOf(carrerasGanadas));
 
-        // eventos participados (igual que arriba: default 0)
+        // eventos participados
         long eventosParticipados = getLong(snap, "usu_stats.eventos_participados", 0L);
         tvEventosParticipados.setText(String.valueOf(eventosParticipados));
 
-        // mejor posición mensual (nullable)
-        Long mejorPos = getLongNullable(snap, "usu_stats.mejor_pos_mensual");
-        tvMejorPosicionMensual.setText(mejorPos == null ? "-" : String.valueOf(mejorPos));
+        // mejor posición (1 es mejor). Si es 0 o null, mostrar "-"
+        Long mejorPos = getLongNullable(snap, "usu_stats.mejor_posicion");
+        tvMejorPosicionMensual.setText((mejorPos == null || mejorPos == 0L) ? "-" : String.valueOf(mejorPos));
     }
 
     // --- Helpers para leer del snapshot ---
