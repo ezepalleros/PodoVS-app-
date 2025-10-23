@@ -441,4 +441,3 @@ public class MainActivity extends AppCompatActivity {
         return getResources().getIdentifier(name, "drawable", getPackageName());
     }
 }
-

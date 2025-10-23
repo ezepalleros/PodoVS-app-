@@ -56,12 +56,13 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     private static final LinkedHashMap<String, String> METRIC_TITLES = new LinkedHashMap<>();
     static {
         METRIC_TITLES.put("usu_stats.km_total", "Km recorridos");
-        METRIC_TITLES.put("usu_stats.km_semana", "Km esta semana");
+        // ❌ quitado: usu_stats.km_semana
         METRIC_TITLES.put("usu_stats.objetos_comprados", "Objetos comprados");
         METRIC_TITLES.put("usu_stats.metas_diarias_total", "Metas diarias OK (total)");
         METRIC_TITLES.put("usu_stats.metas_semana_total", "Metas semanales OK (total)");
         METRIC_TITLES.put("usu_stats.mayor_pasos_dia", "Récord de pasos (día)");
-        // 🔁 Eliminados: metas_diarias_cumplidas, metas_semanales_cumplidas, km_hoy (legacy)
+        METRIC_TITLES.put("usu_stats.eventos_participados", "Eventos participados");
+        METRIC_TITLES.put("usu_stats.mejor_posicion", "Mejor posición");
     }
 
     public ProfileFragment() {}
@@ -172,7 +173,7 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         for (String key : METRIC_TITLES.keySet()) {
             Object v = snap.get(key);
             if (v == null) {
-                if (key.endsWith("km_total") || key.endsWith("km_semana")) {
+                if (key.endsWith("km_total")) {
                     map.put(key, 0.0);
                 } else {
                     map.put(key, 0L);
@@ -190,10 +191,17 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     }
 
     private String formatValue(String key, Object value) {
-        if (key.endsWith("km_total") || key.endsWith("km_semana")) {
+        // Km totales como decimal
+        if (key.endsWith("km_total")) {
             double km = (value instanceof Number) ? ((Number) value).doubleValue() : 0d;
             return String.format(Locale.getDefault(), "%.2f", km);
         }
+        // Mejor posición: si 0 -> "-"
+        if (key.endsWith("mejor_posicion")) {
+            long pos = (value instanceof Number) ? ((Number) value).longValue() : 0L;
+            return pos <= 0 ? "-" : String.valueOf(pos);
+        }
+        // Resto: números enteros con separadores
         long v = (value instanceof Number) ? ((Number) value).longValue() : 0L;
         return String.format(Locale.getDefault(), "%,d", v);
     }
