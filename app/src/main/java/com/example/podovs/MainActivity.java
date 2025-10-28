@@ -15,10 +15,14 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QuerySnapshot;
@@ -33,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
 
     // ==== UI ====
-    private TextView tvKmTotalBig;     // PASOS HOY (número grande) -> ahora son pasos
+    private TextView tvKmTotalBig;     // muestra pasos de hoy (número grande)
     private TextView tvKmSemanaSmall;  // "Semana: xx.xx km"
     private ImageView ivAvatar;
     private TextView tvCoins;
@@ -59,7 +63,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_FIRST_LOGIN_DONE = "first_login_done";
 
     private SharedPreferences userPrefs() {
-        // prefs por usuario -> evita mezclar datos entre sesiones
         return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE);
     }
 
@@ -108,8 +111,9 @@ public class MainActivity extends AppCompatActivity {
         db   = FirebaseFirestore.getInstance();
 
         repo.addStarterPackIfMissing(uid, v -> {}, e -> {});
-        // Normaliza estructura de stats (borra legacy, asegura campos)
         repo.ensureStats(uid);
+        repo.normalizeXpLevel(uid, v -> {}, e -> Log.w(TAG, "normalizeXpLevel: " + e.getMessage()));
+
 
         // Listener del documento del usuario (saldo, km semana, equipamiento, etc.)
         repo.listenUser(uid, (snap, err) -> {
@@ -160,7 +164,6 @@ public class MainActivity extends AppCompatActivity {
 
         requestRuntimePermissions();
 
-        // Si no es el primer login en este dispositivo para este uid, permitir rollover
         if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) {
             maybeRunRollover();
         }
@@ -191,11 +194,9 @@ public class MainActivity extends AppCompatActivity {
 
     // ==== Prefs por usuario ====
     private void ensurePerUserPrefsInitialized() {
-        // detectar cambio de usuario en este dispositivo
         SharedPreferences global = getSharedPreferences(PREFS_GLOBAL, MODE_PRIVATE);
         String lastUid = global.getString(KEY_LAST_UID, null);
         if (!uid.equals(lastUid)) {
-            // Nuevo usuario en el dispositivo -> resetear sus prefs locales
             SharedPreferences up = userPrefs();
             up.edit()
                     .putString(KEY_ULTIMO_DIA, todayString())
@@ -206,7 +207,6 @@ public class MainActivity extends AppCompatActivity {
 
             global.edit().putString(KEY_LAST_UID, uid).apply();
         } else {
-            // Asegurar que existen claves básicas
             SharedPreferences up = userPrefs();
             if (!up.contains(KEY_ULTIMO_DIA)) {
                 up.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
@@ -308,8 +308,6 @@ public class MainActivity extends AppCompatActivity {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
     }
 
-    /** Rollover diario: suma km al semanal en Firestore y resetea pasos locales.
-     *  También sincroniza 'mayor_pasos_dia' si se batió el récord local. */
     private void maybeRunRollover() {
         if (uid == null) return;
 
@@ -322,18 +320,25 @@ public class MainActivity extends AppCompatActivity {
         long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
         double kmAgregar = pasosHoy * STEP_TO_KM;
 
-        // Suma al semanal en Firestore usando cache local
-        double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
-        repo.setKmSemana(uid, nuevoSem, v -> {}, e -> Log.w(TAG, "setKmSemana error: " + e.getMessage()));
+        // Sumar tanto a semana como a total usando la transacción que ya actualiza ambos
+        repo.addKmDelta(uid, kmAgregar,
+                v -> {},
+                e -> Log.w(TAG, "addKmDelta error: " + e.getMessage()));
 
-        // récord
+        double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
+
         repo.updateMayorPasosDiaIfGreater(uid, pasosHoy);
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
         if (diasContados >= 7) {
-            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
+            repo.setKmSemana(uid, 0.0,
+                    v -> {},
+                    e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
             kmSemanaCache = 0.0;
+            nuevoSem = 0.0;
             diasContados = 0;
+        } else {
+            kmSemanaCache = nuevoSem;
         }
 
         sp.edit()
@@ -342,10 +347,8 @@ public class MainActivity extends AppCompatActivity {
                 .putInt(KEY_DIAS_CONTADOS, diasContados)
                 .apply();
 
-        // Refrescar UI local
         tvKmTotalBig.setText(String.valueOf(0));
         tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", nuevoSem));
-        kmSemanaCache = nuevoSem;
     }
 
     private void updateSmallWeekAndBigStepsFromStorage() {
@@ -382,6 +385,35 @@ public class MainActivity extends AppCompatActivity {
                 .addOnFailureListener(e -> Log.w(TAG, "my_cosmetics get() error: " + e.getMessage()));
     }
 
+    private static class LayerRequest {
+        final String type;
+        final String asset;
+        LayerRequest(String t, String a) { type = t; asset = a; }
+    }
+
+    @Nullable
+    private LayerRequest fromCache(QuerySnapshot qs, @Nullable String cosId) {
+        if (cosId == null) return null;
+        DocumentSnapshot d = qs.getDocuments().stream()
+                .filter(doc -> cosId.equals(doc.getId()))
+                .findFirst().orElse(null);
+        if (d == null) return null;
+
+        Object at = d.get("myc_cache.cos_assetType");
+        Object av = d.get("myc_cache.cos_asset");
+        String type  = (at instanceof String && !((String) at).isEmpty()) ? (String) at : null;
+        String asset = (av instanceof String && !((String) av).isEmpty()) ? (String) av : null;
+        if (asset == null) return null;
+        return new LayerRequest(type, asset);
+    }
+
+    private boolean isRemote(@Nullable LayerRequest r) {
+        return r != null && r.asset != null &&
+                ("cloudinary".equalsIgnoreCase(r.type)
+                        || r.asset.startsWith("http://")
+                        || r.asset.startsWith("https://"));
+    }
+
     private void buildAvatarFromMyCosmetics(QuerySnapshot qs,
                                             @Nullable String pielId,
                                             @Nullable String pantalonId,
@@ -389,44 +421,99 @@ public class MainActivity extends AppCompatActivity {
                                             @Nullable String zapasId,
                                             @Nullable String cabezaId) {
 
-        String pielAsset     = findAssetFor(qs, pielId);
-        String pantAsset     = findAssetFor(qs, pantalonId);
-        String remeraAsset   = findAssetFor(qs, remeraId);
-        String zapasAsset    = findAssetFor(qs, zapasId);
-        String cabezaAsset   = findAssetFor(qs, cabezaId);
+        LayerRequest[] reqs = new LayerRequest[] {
+                fromCache(qs, pielId),
+                fromCache(qs, pantalonId),
+                fromCache(qs, remeraId),
+                fromCache(qs, zapasId),
+                fromCache(qs, cabezaId)
+        };
 
-        ArrayList<Drawable> layers = new ArrayList<>();
-        addLayerIfExists(layers, pielAsset);      // base
-        addLayerIfExists(layers, pantAsset);      // pantalón
-        addLayerIfExists(layers, remeraAsset);    // remera
-        addLayerIfExists(layers, zapasAsset);     // zapatillas
-        addLayerIfExists(layers, cabezaAsset);    // gorra/sombrero
+        boolean anyRemote = false;
+        for (LayerRequest r : reqs) {
+            if (isRemote(r)) { anyRemote = true; break; }
+        }
 
-        if (layers.isEmpty()) {
-            int def = getResIdByName("piel_startskin");
-            if (def != 0) ivAvatar.setImageResource(def);
+        if (!anyRemote) {
+            ArrayList<Drawable> layers = new ArrayList<>();
+            for (LayerRequest r : reqs) {
+                if (r == null || r.asset == null) continue;
+                addLayerIfExists(layers, r.asset);
+            }
+            if (layers.isEmpty()) {
+                int def = getResIdByName("piel_startskin");
+                if (def != 0) ivAvatar.setImageResource(def);
+                return;
+            }
+            LayerDrawable ld = new LayerDrawable(layers.toArray(new Drawable[0]));
+            ivAvatar.setImageDrawable(ld);
+            ivAvatar.setAdjustViewBounds(true);
             return;
         }
 
-        LayerDrawable ld = new LayerDrawable(layers.toArray(new Drawable[0]));
-        ivAvatar.setImageDrawable(ld);
-        ivAvatar.setAdjustViewBounds(true);
+        loadLayersAsync(reqs, drawables -> {
+            if (drawables.isEmpty()) {
+                int def = getResIdByName("piel_startskin");
+                if (def != 0) ivAvatar.setImageResource(def);
+                return;
+            }
+            LayerDrawable ld = new LayerDrawable(drawables.toArray(new Drawable[0]));
+            ivAvatar.setImageDrawable(ld);
+            ivAvatar.setAdjustViewBounds(true);
+        });
+    }
+
+    private interface LayersReady { void onReady(ArrayList<Drawable> layers); }
+
+    private void loadLayersAsync(LayerRequest[] reqs, LayersReady cb) {
+        ArrayList<Drawable> out = new ArrayList<>();
+        final int total = reqs.length;
+        final int[] done = {0};
+
+        for (LayerRequest r : reqs) {
+            if (r == null || r.asset == null) { done[0]++; maybeFinish(done[0], total, out, cb); continue; }
+
+            if (!isRemote(r)) {
+                int resId = getResIdByName(r.asset);
+                Drawable dr = (resId != 0) ? ContextCompat.getDrawable(this, resId) : null;
+                if (dr != null) out.add(dr);
+                done[0]++; maybeFinish(done[0], total, out, cb);
+            } else {
+                String url;
+                if (r.asset.startsWith("http://") || r.asset.startsWith("https://")) {
+                    url = r.asset;
+                } else {
+                    String cloudName = getString(R.string.cloudinary_cloud_name);
+                    boolean hasExt = r.asset.contains(".");
+                    url = "https://res.cloudinary.com/" + cloudName + "/image/upload/" + r.asset + (hasExt ? "" : ".png");
+                }
+
+                Glide.with(this).asDrawable().load(url).into(new CustomTarget<Drawable>() {
+                    @Override
+                    public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                        out.add(resource);
+                        done[0]++; maybeFinish(done[0], total, out, cb);
+                    }
+                    @Override
+                    public void onLoadCleared(@Nullable Drawable placeholder) {
+                        done[0]++; maybeFinish(done[0], total, out, cb);
+                    }
+                    @Override
+                    public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                        done[0]++; maybeFinish(done[0], total, out, cb);
+                    }
+                });
+            }
+        }
+    }
+
+    private void maybeFinish(int done, int total, ArrayList<Drawable> out, LayersReady cb) {
+        if (done >= total) cb.onReady(out);
     }
 
     @Nullable
     private String asString(Object o) {
         return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null;
-    }
-
-    @Nullable
-    private String findAssetFor(QuerySnapshot qs, @Nullable String cosId) {
-        if (cosId == null) return null;
-        DocumentSnapshot d = qs.getDocuments().stream()
-                .filter(doc -> cosId.equals(doc.getId()))
-                .findFirst().orElse(null);
-        if (d == null) return null;
-        Object v = d.get("myc_cache.cos_asset");
-        return (v instanceof String && !((String) v).isEmpty()) ? (String) v : null;
     }
 
     private void addLayerIfExists(ArrayList<Drawable> layers, @Nullable String assetName) {
