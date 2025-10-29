@@ -3,6 +3,8 @@ package com.example.podovs;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -17,6 +19,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -26,6 +31,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashMap;
 
 public class ProfileFragment extends BottomSheetDialogFragment {
 
@@ -51,10 +57,16 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     private static final String KEY_SLOT1 = "slot1_key";
     private static final String KEY_SLOT2 = "slot2_key";
 
-    // Tope de XP SIEMPRE 100 (la lógica de leveleo está en FirestoreRepo)
     private static final int XP_CAP = 100;
 
-    // Métricas para las tarjetas
+    // (Opcional) offsets finos por cosmético. Y<0 sube.
+    private static final Map<String, int[]> OFFSETS = new HashMap<>();
+    static {
+        // Si alguna vez quisieras subir/bajar algo:
+        // OFFSETS.put("cos_id_7", new int[]{0, -2}); // ejemplo
+    }
+
+    // Métricas tarjetas
     private static final LinkedHashMap<String, String> METRIC_TITLES = new LinkedHashMap<>();
     static {
         METRIC_TITLES.put("usu_stats.km_total", "Km recorridos");
@@ -218,64 +230,126 @@ public class ProfileFragment extends BottomSheetDialogFragment {
                                             @Nullable String cabezaId) {
         if (!isAdded()) return;
 
-        String pielAsset   = findAssetFor(qs, pielId);
-        String pantAsset   = findAssetFor(qs, pantalonId);
-        String remeraAsset = findAssetFor(qs, remeraId);
-        String zapasAsset  = findAssetFor(qs, zapasId);
-        String cabezaAsset = findAssetFor(qs, cabezaId);
+        // Obtener assets (pueden ser nombres o URLs) + offsets
+        ArrayList<LayerReq> reqs = new ArrayList<>();
+        addReq(qs, reqs, pielId);
+        addReq(qs, reqs, pantalonId);
+        addReq(qs, reqs, remeraId);
+        addReq(qs, reqs, zapasId);
+        addReq(qs, reqs, cabezaId);
 
-        ArrayList<android.graphics.drawable.Drawable> layers = new ArrayList<>();
-        addLayerIfExists(layers, pielAsset);
-        addLayerIfExists(layers, pantAsset);
-        addLayerIfExists(layers, remeraAsset);
-        addLayerIfExists(layers, zapasAsset);
-        addLayerIfExists(layers, cabezaAsset);
-
-        if (layers.isEmpty()) {
+        if (reqs.isEmpty()) {
             int def = getResIdByName("piel_startskin");
             if (def != 0) ivAvatar.setImageResource(def);
             return;
         }
 
-        int baseW = Math.max(1, layers.get(0).getIntrinsicWidth());
-        int baseH = Math.max(1, layers.get(0).getIntrinsicHeight());
-        if (baseW <= 1 || baseH <= 1) { baseW = 32; baseH = 48; }
+        // Cargar drawables (local o URL) y compositar
+        loadAllDrawables(reqs, layers -> composeAndShow(layers));
+    }
 
-        Bitmap baseBmp = Bitmap.createBitmap(baseW, baseH, Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas canvas = new android.graphics.Canvas(baseBmp);
-        for (android.graphics.drawable.Drawable d : layers) {
-            d.setBounds(0, 0, baseW, baseH);
+    // ---------- carga/composición ----------
+    private void composeAndShow(ArrayList<Layer> layers) {
+        if (!isAdded() || layers.isEmpty()) return;
+
+        int bw = Math.max(32, layers.get(0).drawable.getIntrinsicWidth());
+        int bh = Math.max(48, layers.get(0).drawable.getIntrinsicHeight());
+
+        Bitmap base = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(base);
+
+        for (Layer l : layers) {
+            Drawable d = l.drawable;
+            d.setBounds(0, 0, bw, bh);
+            canvas.save();
+            canvas.translate(l.offX, l.offY);
             d.draw(canvas);
+            canvas.restore();
         }
 
         final int targetHpx = dpToPx(96);
-        int factor = Math.max(1, targetHpx / baseH);
-        Bitmap scaled = Bitmap.createScaledBitmap(baseBmp, baseW * factor, baseH * factor, false);
+        int factor = Math.max(1, targetHpx / bh);
+        Bitmap scaled = Bitmap.createScaledBitmap(base, bw * factor, bh * factor, false);
 
         ivAvatar.setAdjustViewBounds(true);
         ivAvatar.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         ivAvatar.setImageBitmap(scaled);
     }
 
-    private int dpToPx(int dp) { return Math.round(dp * getResources().getDisplayMetrics().density); }
-    @Nullable private String asString(Object o) { return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null; }
+    private void loadAllDrawables(ArrayList<LayerReq> reqs, OnLayersReady cb) {
+        ArrayList<Layer> result = new ArrayList<>();
+        if (reqs.isEmpty()) { cb.onReady(result); return; }
+
+        final int total = reqs.size();
+        final int[] count = {0};
+
+        for (LayerReq r : reqs) {
+            loadDrawable(r.asset, new CustomTarget<Drawable>() {
+                @Override public void onResourceReady(@NonNull Drawable res, @Nullable Transition<? super Drawable> t) {
+                    result.add(new Layer(res, r.offX, r.offY));
+                    if (++count[0] == total && isAdded()) cb.onReady(result);
+                }
+                @Override public void onLoadCleared(@Nullable Drawable placeholder) {
+                    // no-op
+                }
+            });
+        }
+    }
+
+    private void loadDrawable(@Nullable String asset, @NonNull CustomTarget<Drawable> target) {
+        if (!isAdded()) return;
+        if (asset == null) { target.onResourceReady(new EmptyDrawable(), null); return; }
+
+        if (asset.startsWith("http")) {
+            Glide.with(requireContext()).asDrawable().load(asset).into(target);
+        } else {
+            int resId = getResIdByName(asset);
+            Drawable d = (resId != 0) ? ContextCompat.getDrawable(requireContext(), resId) : null;
+            target.onResourceReady((d != null) ? d : new EmptyDrawable(), null);
+        }
+    }
+
+    private interface OnLayersReady { void onReady(ArrayList<Layer> layers); }
+    private static class LayerReq {
+        final String asset; final int offX; final int offY;
+        LayerReq(String a, int x, int y) { asset=a; offX=x; offY=y; }
+    }
+    private static class Layer {
+        final Drawable drawable; final int offX; final int offY;
+        Layer(Drawable d, int x, int y) { drawable=d; offX=x; offY=y; }
+    }
+
+    // Transparente por si algo falla
+    private static class EmptyDrawable extends Drawable {
+        @Override public void draw(@NonNull Canvas canvas) {}
+        @Override public void setAlpha(int alpha) {}
+        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSPARENT; }
+        @Override public int getIntrinsicWidth() { return 32; }
+        @Override public int getIntrinsicHeight() { return 48; }
+    }
+
+    // ---------- util de avatar ----------
+    private void addReq(QuerySnapshot qs, ArrayList<LayerReq> out, @Nullable String cosId) {
+        if (cosId == null) return;
+        String asset = findAssetFor(qs, cosId);
+        if (asset == null) return;
+        int[] off = OFFSETS.getOrDefault(cosId, new int[]{0,0});
+        out.add(new LayerReq(asset, off[0], off[1]));
+    }
+
     @Nullable private String findAssetFor(QuerySnapshot qs, @Nullable String cosId) {
         if (cosId == null) return null;
         for (DocumentSnapshot d : qs.getDocuments()) {
             if (cosId.equals(d.getId())) {
                 Object v = d.get("myc_cache.cos_asset");
-                if (v instanceof String && !((String) v).isEmpty()) return (String) v;
+                if (v instanceof String && !((String) v).isEmpty()) return (String) v; // puede ser URL o nombre
             }
         }
         return null;
     }
-    private void addLayerIfExists(ArrayList<android.graphics.drawable.Drawable> layers, @Nullable String assetName) {
-        if (assetName == null) return;
-        int resId = getResIdByName(assetName);
-        if (resId == 0) return;
-        android.graphics.drawable.Drawable dr = ContextCompat.getDrawable(requireContext(), resId);
-        if (dr != null) layers.add(dr);
-    }
+
+    private int dpToPx(int dp) { return Math.round(dp * getResources().getDisplayMetrics().density); }
     private int getResIdByName(String name) { return getResources().getIdentifier(name, "drawable", requireContext().getPackageName()); }
 
     // --------- Helpers ---------
@@ -284,4 +358,5 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         Object v = s.get(path);
         return (v instanceof Number) ? ((Number) v).longValue() : def;
     }
+    @Nullable private String asString(Object o) { return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null; }
 }

@@ -381,25 +381,24 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    public void onDailyGoalReached(@NonNull String uid,
-                                   @NonNull OnSuccessListener<Void> ok,
+    public void onDailyGoalReached(@NonNull String uid, @NonNull OnSuccessListener<Void> ok,
                                    @NonNull OnFailureListener err) {
-        grantReward(uid, 50, 10, true, false, ok, err);
+        grantReward(uid, 50, 25, true, false, ok, err);
     }
-    public void onWeeklyGoalReached(@NonNull String uid,
-                                    @NonNull OnSuccessListener<Void> ok,
+
+    public void onWeeklyGoalReached(@NonNull String uid, @NonNull OnSuccessListener<Void> ok,
                                     @NonNull OnFailureListener err) {
-        grantReward(uid, 250, 80, false, true, ok, err);
+        grantReward(uid, 250, 90, false, true, ok, err);
     }
-    public void claimDaily(@NonNull String uid, long coins,
-                           @NonNull OnSuccessListener<Void> ok,
+
+    public void claimDaily(@NonNull String uid, long coins, @NonNull OnSuccessListener<Void> ok,
                            @NonNull OnFailureListener err) {
-        grantReward(uid, coins, 10, true, false, ok, err);
+        grantReward(uid, coins, 25, true, false, ok, err);
     }
-    public void claimWeekly(@NonNull String uid, long coins,
-                            @NonNull OnSuccessListener<Void> ok,
+
+    public void claimWeekly(@NonNull String uid, long coins, @NonNull OnSuccessListener<Void> ok,
                             @NonNull OnFailureListener err) {
-        grantReward(uid, coins, 80, false, true, ok, err);
+        grantReward(uid, coins, 90, false, true, ok, err);
     }
 
     // ===== Helpers =====

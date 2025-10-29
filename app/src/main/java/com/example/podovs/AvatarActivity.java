@@ -1,15 +1,11 @@
 package com.example.podovs;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.util.TypedValue;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
 
@@ -20,11 +16,18 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.view.View;            // <-- FALTABA
+import android.view.ViewGroup;      // <-- FALTABA
+
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.WriteBatch;
+import com.google.firebase.firestore.SetOptions;   // <-- FALTABA
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,14 +44,10 @@ public class AvatarActivity extends AppCompatActivity {
     private FirebaseFirestore db;
     private String uid;
 
-    // Inventario cacheado
     private final List<Cosmetic> all = new ArrayList<>();
-    // Selección actual por tipo (piel/cabeza/remera/pantalon/zapatillas)
     private final Map<String, String> selectedByTipo = new HashMap<>();
-    // Tipo visible en la grilla
     private String currentTipo = "piel";
 
-    // Tipos soportados -> key en users.usu_equipped
     private static final Map<String, String> TIPO_TO_USER_FIELD = new HashMap<>();
     static {
         TIPO_TO_USER_FIELD.put("piel", "usu_equipped.usu_piel");
@@ -56,6 +55,12 @@ public class AvatarActivity extends AppCompatActivity {
         TIPO_TO_USER_FIELD.put("remera", "usu_equipped.usu_remera");
         TIPO_TO_USER_FIELD.put("pantalon", "usu_equipped.usu_pantalon");
         TIPO_TO_USER_FIELD.put("zapatillas", "usu_equipped.usu_zapas");
+    }
+
+    // Offsets por cosmético (X,Y) en px del sprite base (32x48). Negativo sube.
+    private static final Map<String, int[]> OFFSETS = new HashMap<>();
+    static {
+        OFFSETS.put("cos_id_7", new int[]{0, -6}); // cuernos: subir un poco
     }
 
     @Override
@@ -79,22 +84,19 @@ public class AvatarActivity extends AppCompatActivity {
         uid = getSharedPreferences("session", MODE_PRIVATE).getString("uid", null);
         if (uid == null) { finish(); return; }
 
-        // Carga user + inventario, inicializa selección y arma preview
         loadData();
 
-        // Tabs
         btnCatPiel.setOnClickListener(v -> { currentTipo = "piel"; refreshGrid(); });
         btnCatCabeza.setOnClickListener(v -> { currentTipo = "cabeza"; refreshGrid(); });
         btnCatRemera.setOnClickListener(v -> { currentTipo = "remera"; refreshGrid(); });
         btnCatPantalon.setOnClickListener(v -> { currentTipo = "pantalon"; refreshGrid(); });
         btnCatZapas.setOnClickListener(v -> { currentTipo = "zapatillas"; refreshGrid(); });
 
-        btnConfirm.setOnClickListener(v -> saveSelection());
+        btnConfirm.setOnClickListener(v -> saveSelection());  // <-- ahora existe
         btnCancel.setOnClickListener(v -> finish());
     }
 
     private void loadData() {
-        // 1) User para saber equipados actuales
         Tasks.whenAllSuccess(
                 db.collection("users").document(uid).get(),
                 db.collection("users").document(uid).collection("my_cosmetics").get()
@@ -102,19 +104,18 @@ public class AvatarActivity extends AppCompatActivity {
             DocumentSnapshot user = (DocumentSnapshot) list.get(0);
             QuerySnapshot inv     = (QuerySnapshot)    list.get(1);
 
-            // set selección actual desde el user
             selectedByTipo.put("piel",        asString(user.get("usu_equipped.usu_piel")));
             selectedByTipo.put("cabeza",      asString(user.get("usu_equipped.usu_cabeza")));
             selectedByTipo.put("remera",      asString(user.get("usu_equipped.usu_remera")));
             selectedByTipo.put("pantalon",    asString(user.get("usu_equipped.usu_pantalon")));
             selectedByTipo.put("zapatillas",  asString(user.get("usu_equipped.usu_zapas")));
 
-            // Inventario
             all.clear();
             for (DocumentSnapshot d : inv.getDocuments()) {
                 String id     = d.getId();
-                String tipo   = asString(d.get("myc_cache.cos_tipo"));
-                String asset  = asString(d.get("myc_cache.cos_asset"));
+                Map<String, Object> cache = (Map<String, Object>) d.get("myc_cache");
+                String tipo   = cache == null ? null : asString(cache.get("cos_tipo"));
+                String asset  = cache == null ? null : asString(cache.get("cos_asset")); // nombre drawable o URL
                 boolean eq    = Boolean.TRUE.equals(d.getBoolean("myc_equipped"));
                 all.add(new Cosmetic(id, tipo, asset, eq));
             }
@@ -125,52 +126,54 @@ public class AvatarActivity extends AppCompatActivity {
     }
 
     private void refreshGrid() {
-        // Construye lista filtrada por tipo + item "Ninguno" (id null)
         List<Cosmetic> filtered = new ArrayList<>();
-        // "Ninguno" solo para categorías que no son piel
-        if (!"piel".equals(currentTipo)) {
-            filtered.add(Cosmetic.none(currentTipo));
-        }
-        for (Cosmetic c : all) {
-            if (currentTipo.equalsIgnoreCase(c.tipo)) filtered.add(c);
-        }
-        rv.setAdapter(new CosAdapter(filtered, currentTipo, selectedByTipo.get(currentTipo),
-                (clicked) -> {
-                    // actualizar selección y preview
-                    selectedByTipo.put(currentTipo, clicked.id); // puede ser null (Ninguno)
-                    renderPreview();
-                    rv.getAdapter().notifyDataSetChanged();
-                }));
+        if (!"piel".equals(currentTipo)) filtered.add(Cosmetic.none(currentTipo));
+        for (Cosmetic c : all) if (currentTipo.equalsIgnoreCase(c.tipo)) filtered.add(c);
+
+        rv.setAdapter(new CosAdapter(filtered, currentTipo, selectedByTipo.get(currentTipo), clicked -> {
+            selectedByTipo.put(currentTipo, clicked.id); // puede ser null
+            renderPreview();
+            rv.getAdapter().notifyDataSetChanged();
+        }));
     }
 
     private void renderPreview() {
-        // assets por tipo a partir de la selección actual
-        String pielAsset  = assetForSelected("piel");
-        String panAsset   = assetForSelected("pantalon");
-        String remAsset   = assetForSelected("remera");
-        String zapAsset   = assetForSelected("zapatillas");
-        String cabAsset   = assetForSelected("cabeza");
+        String selPiel = selectedByTipo.get("piel");
+        String selPan  = selectedByTipo.get("pantalon");
+        String selRem  = selectedByTipo.get("remera");
+        String selZap  = selectedByTipo.get("zapatillas");
+        String selCab  = selectedByTipo.get("cabeza");
 
-        ArrayList<Drawable> layers = new ArrayList<>();
-        addLayerIfExists(layers, pielAsset);
-        addLayerIfExists(layers, panAsset);
-        addLayerIfExists(layers, remAsset);
-        addLayerIfExists(layers, zapAsset);
-        addLayerIfExists(layers, cabAsset);
+        List<LayerReq> reqs = new ArrayList<>();
+        addReq(reqs, selPiel);
+        addReq(reqs, selPan);
+        addReq(reqs, selRem);
+        addReq(reqs, selZap);
+        addReq(reqs, selCab);
 
+        if (reqs.isEmpty()) { ivPreview.setImageDrawable(null); return; }
+        loadAllDrawables(reqs, this::composeAndShow);
+    }
+
+    private void composeAndShow(List<Layer> layers) {
         if (layers.isEmpty()) { ivPreview.setImageDrawable(null); return; }
 
-        // tamaño base del sprite
-        int bw = Math.max(1, layers.get(0).getIntrinsicWidth());
-        int bh = Math.max(1, layers.get(0).getIntrinsicHeight());
-        if (bw <= 1 || bh <= 1) { bw = 32; bh = 48; }
+        int bw = Math.max(32, layers.get(0).drawable.getIntrinsicWidth());
+        int bh = Math.max(48, layers.get(0).drawable.getIntrinsicHeight());
 
         Bitmap base = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(base);
-        for (Drawable d : layers) { d.setBounds(0,0,bw,bh); d.draw(c); }
+        Canvas canvas = new Canvas(base);
 
-        // escalar "pixel perfect" a un alto objetivo
-        int targetH = dpToPx(180);       // tamaño cómodo para previsualización
+        for (Layer l : layers) {
+            Drawable d = l.drawable;
+            d.setBounds(0,0,bw,bh);
+            canvas.save();
+            canvas.translate(l.offX, l.offY);
+            d.draw(canvas);
+            canvas.restore();
+        }
+
+        int targetH = dpToPx(180);
         int factor  = Math.max(1, targetH / bh);
         Bitmap scaled = Bitmap.createScaledBitmap(base, bw*factor, bh*factor, /*filter=*/false);
 
@@ -179,10 +182,11 @@ public class AvatarActivity extends AppCompatActivity {
         ivPreview.setImageBitmap(scaled);
     }
 
+    // ======= SAVE (volvió el método que faltaba) =======
     private void saveSelection() {
         WriteBatch batch = db.batch();
 
-        // 1) actualizar campos del usuario
+        // 1) actualizar equipados del usuario
         Map<String, Object> upd = new HashMap<>();
         for (Map.Entry<String,String> e : selectedByTipo.entrySet()) {
             String tipo = e.getKey();
@@ -191,7 +195,7 @@ public class AvatarActivity extends AppCompatActivity {
         }
         batch.update(db.collection("users").document(uid), upd);
 
-        // 2) setear myc_equipped true/false por categoría
+        // 2) myc_equipped true/false por categoría
         for (String tipo : TIPO_TO_USER_FIELD.keySet()) {
             String chosenId = selectedByTipo.get(tipo); // puede ser null
             for (Cosmetic c : all) {
@@ -199,9 +203,11 @@ public class AvatarActivity extends AppCompatActivity {
                 boolean shouldBeTrue = (chosenId != null) && chosenId.equals(c.id);
                 Map<String, Object> m = new HashMap<>();
                 m.put("myc_equipped", shouldBeTrue);
-                batch.set(db.collection("users").document(uid)
+                batch.set(
+                        db.collection("users").document(uid)
                                 .collection("my_cosmetics").document(c.id),
-                        m, com.google.firebase.firestore.SetOptions.merge());
+                        m, SetOptions.merge()
+                );
             }
         }
 
@@ -210,9 +216,66 @@ public class AvatarActivity extends AppCompatActivity {
                 .addOnFailureListener(e -> finish());
     }
 
+    // ---------- helpers de carga y modelo ----------
+    private void addReq(List<LayerReq> out, @Nullable String cosId) {
+        if (cosId == null) return;
+        for (Cosmetic c : all) {
+            if (cosId.equals(c.id)) {
+                int[] off = OFFSETS.getOrDefault(c.id, new int[]{0,0});
+                out.add(new LayerReq(c.asset, off[0], off[1]));
+                break;
+            }
+        }
+    }
 
+    private void loadAllDrawables(List<LayerReq> reqs, OnLayersReady cb) {
+        List<Layer> result = new ArrayList<>();
+        final int total = reqs.size();
+        if (total == 0) { cb.onReady(result); return; }
 
-    // ------- util ----------
+        final int[] count = {0};
+        for (LayerReq r : reqs) {
+            loadDrawable(r.asset, new CustomTarget<Drawable>() {
+                @Override public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                    result.add(new Layer(resource, r.offX, r.offY));
+                    if (++count[0] == total) cb.onReady(result);
+                }
+                @Override public void onLoadCleared(@Nullable Drawable placeholder) { }
+            });
+        }
+    }
+
+    private void loadDrawable(@Nullable String asset, @NonNull CustomTarget<Drawable> target) {
+        if (asset == null) { target.onResourceReady(new EmptyDrawable(), null); return; }
+        if (asset.startsWith("http")) {
+            Glide.with(this).asDrawable().load(asset).into(target);
+        } else {
+            int resId = getResources().getIdentifier(asset, "drawable", getPackageName());
+            Drawable d = (resId != 0) ? ContextCompat.getDrawable(this, resId) : null;
+            target.onResourceReady(d != null ? d : new EmptyDrawable(), null);
+        }
+    }
+
+    private interface OnLayersReady { void onReady(List<Layer> layers); }
+    private static class LayerReq {
+        final String asset; final int offX; final int offY;
+        LayerReq(String a, int x, int y) { asset=a; offX=x; offY=y; }
+    }
+    private static class Layer {
+        final Drawable drawable; final int offX; final int offY;
+        Layer(Drawable d, int x, int y) { drawable=d; offX=x; offY=y; }
+    }
+
+    // Drawable transparente de 32x48
+    private static class EmptyDrawable extends Drawable {
+        @Override public void draw(@NonNull Canvas canvas) { }
+        @Override public void setAlpha(int alpha) {}
+        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSPARENT; }
+        @Override public int getIntrinsicWidth() { return 32; }
+        @Override public int getIntrinsicHeight() { return 48; }
+    }
+
     @Nullable private String asString(Object o) {
         return (o instanceof String && !((String)o).isEmpty()) ? (String) o : null;
     }
@@ -220,25 +283,12 @@ public class AvatarActivity extends AppCompatActivity {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp,
                 getResources().getDisplayMetrics()));
     }
-    private void addLayerIfExists(List<Drawable> layers, @Nullable String asset) {
-        if (asset == null) return;
-        int resId = getResources().getIdentifier(asset, "drawable", getPackageName());
-        if (resId == 0) return;
-        Drawable d = ContextCompat.getDrawable(this, resId);
-        if (d != null) layers.add(d);
-    }
-    @Nullable private String assetForSelected(String tipo) {
-        String sel = selectedByTipo.get(tipo);
-        if (sel == null) return null;
-        for (Cosmetic c : all) if (sel.equals(c.id)) return c.asset;
-        return null;
-    }
 
-    // ------- modelos + adapter ----------
+    // ====== MODELOS + ADAPTER ======
     private static class Cosmetic {
-        final String id;      // doc id (p.ej., cos_id_2) o null si "ninguno"
-        final String tipo;    // piel/cabeza/remera/pantalon/zapatillas
-        final String asset;   // nombre de drawable
+        final String id;
+        final String tipo;
+        final String asset;   // nombre de drawable o URL (Cloudinary)
         final boolean equipped;
         Cosmetic(String id, String tipo, String asset, boolean eq) {
             this.id=id; this.tipo=tipo; this.asset=asset; this.equipped=eq;
@@ -251,7 +301,7 @@ public class AvatarActivity extends AppCompatActivity {
 
         final List<Cosmetic> data;
         final String tipo;
-        final String selectedId; // puede ser null
+        final String selectedId;
         final OnPick onPick;
 
         CosAdapter(List<Cosmetic> data, String tipo, String selectedId, OnPick onPick) {
@@ -273,17 +323,16 @@ public class AvatarActivity extends AppCompatActivity {
             Context ctx = h.itemView.getContext();
             Cosmetic c = data.get(i);
             if (c.id == null) {
-                // "Ninguno" -> ícono vacío
                 h.iv.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+            } else if (c.asset != null && c.asset.startsWith("http")) {
+                Glide.with(ctx).load(c.asset).into(h.iv);
             } else {
                 int res = ctx.getResources().getIdentifier(c.asset, "drawable", ctx.getPackageName());
                 if (res != 0) h.iv.setImageResource(res); else h.iv.setImageDrawable(null);
             }
-            // borde de selección
             boolean sel = (selectedId == null && c.id == null) ||
                     (selectedId != null && selectedId.equals(c.id));
             h.iv.setBackgroundColor(sel ? 0x332196F3 : 0x00000000);
-
             h.itemView.setOnClickListener(v -> onPick.onPick(c));
         }
 
@@ -294,7 +343,8 @@ public class AvatarActivity extends AppCompatActivity {
                     c.getResources().getDisplayMetrics()));
         }
         static class Holder extends RecyclerView.ViewHolder {
-            ImageView iv; Holder(@NonNull View itemView) { super(itemView); iv = (ImageView) itemView; }
+            ImageView iv;
+            Holder(@NonNull View itemView) { super(itemView); iv = (ImageView) itemView; }
         }
     }
 }
