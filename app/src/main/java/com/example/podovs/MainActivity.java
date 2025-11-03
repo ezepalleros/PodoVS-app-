@@ -422,11 +422,11 @@ public class MainActivity extends AppCompatActivity {
                                             @Nullable String cabezaId) {
 
         LayerRequest[] reqs = new LayerRequest[] {
-                fromCache(qs, pielId),
-                fromCache(qs, pantalonId),
-                fromCache(qs, remeraId),
-                fromCache(qs, zapasId),
-                fromCache(qs, cabezaId)
+                fromCache(qs, pielId),      // base
+                fromCache(qs, zapasId),     // zapatillas
+                fromCache(qs, pantalonId),  // pantalón
+                fromCache(qs, remeraId),    // remera
+                fromCache(qs, cabezaId)     // cabeza
         };
 
         boolean anyRemote = false;
@@ -466,18 +466,24 @@ public class MainActivity extends AppCompatActivity {
     private interface LayersReady { void onReady(ArrayList<Drawable> layers); }
 
     private void loadLayersAsync(LayerRequest[] reqs, LayersReady cb) {
-        ArrayList<Drawable> out = new ArrayList<>();
+        final Drawable[] slots = new Drawable[reqs.length];
         final int total = reqs.length;
         final int[] done = {0};
 
-        for (LayerRequest r : reqs) {
-            if (r == null || r.asset == null) { done[0]++; maybeFinish(done[0], total, out, cb); continue; }
+        for (int i = 0; i < reqs.length; i++) {
+            final int idx = i;
+            final LayerRequest r = reqs[i];
+
+            if (r == null || r.asset == null) {
+                done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
+                continue;
+            }
 
             if (!isRemote(r)) {
                 int resId = getResIdByName(r.asset);
                 Drawable dr = (resId != 0) ? ContextCompat.getDrawable(this, resId) : null;
-                if (dr != null) out.add(dr);
-                done[0]++; maybeFinish(done[0], total, out, cb);
+                slots[idx] = dr;
+                done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
             } else {
                 String url;
                 if (r.asset.startsWith("http://") || r.asset.startsWith("https://")) {
@@ -489,26 +495,27 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 Glide.with(this).asDrawable().load(url).into(new CustomTarget<Drawable>() {
-                    @Override
-                    public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
-                        out.add(resource);
-                        done[0]++; maybeFinish(done[0], total, out, cb);
+                    @Override public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                        slots[idx] = resource;
+                        done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
                     }
-                    @Override
-                    public void onLoadCleared(@Nullable Drawable placeholder) {
-                        done[0]++; maybeFinish(done[0], total, out, cb);
+                    @Override public void onLoadCleared(@Nullable Drawable placeholder) {
+                        done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
                     }
-                    @Override
-                    public void onLoadFailed(@Nullable Drawable errorDrawable) {
-                        done[0]++; maybeFinish(done[0], total, out, cb);
+                    @Override public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                        done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
                     }
                 });
             }
         }
     }
 
-    private void maybeFinish(int done, int total, ArrayList<Drawable> out, LayersReady cb) {
-        if (done >= total) cb.onReady(out);
+    private void maybeFinishOrdered(Drawable[] slots, int done, int total, LayersReady cb) {
+        if (done >= total) {
+            ArrayList<Drawable> out = new ArrayList<>();
+            for (Drawable d : slots) if (d != null) out.add(d);
+            cb.onReady(out);
+        }
     }
 
     @Nullable

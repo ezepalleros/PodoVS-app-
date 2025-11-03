@@ -139,17 +139,18 @@ public class AvatarActivity extends AppCompatActivity {
 
     private void renderPreview() {
         String selPiel = selectedByTipo.get("piel");
+        String selZap  = selectedByTipo.get("zapatillas");
         String selPan  = selectedByTipo.get("pantalon");
         String selRem  = selectedByTipo.get("remera");
-        String selZap  = selectedByTipo.get("zapatillas");
         String selCab  = selectedByTipo.get("cabeza");
 
         List<LayerReq> reqs = new ArrayList<>();
-        addReq(reqs, selPiel);
-        addReq(reqs, selPan);
-        addReq(reqs, selRem);
-        addReq(reqs, selZap);
-        addReq(reqs, selCab);
+        // ORDEN CORRECTO SIEMPRE
+        addReq(reqs, selPiel);       // base
+        addReq(reqs, selZap);        // zapatillas debajo del pantalón
+        addReq(reqs, selPan);        // pantalón debajo de remera
+        addReq(reqs, selRem);        // remera
+        addReq(reqs, selCab);        // cabeza
 
         if (reqs.isEmpty()) { ivPreview.setImageDrawable(null); return; }
         loadAllDrawables(reqs, this::composeAndShow);
@@ -229,18 +230,31 @@ public class AvatarActivity extends AppCompatActivity {
     }
 
     private void loadAllDrawables(List<LayerReq> reqs, OnLayersReady cb) {
-        List<Layer> result = new ArrayList<>();
+        final Layer[] slots = new Layer[reqs.size()];
         final int total = reqs.size();
-        if (total == 0) { cb.onReady(result); return; }
+        if (total == 0) { cb.onReady(new ArrayList<>()); return; }
 
         final int[] count = {0};
-        for (LayerReq r : reqs) {
+        for (int i = 0; i < reqs.size(); i++) {
+            final int idx = i;
+            final LayerReq r = reqs.get(i);
+
             loadDrawable(r.asset, new CustomTarget<Drawable>() {
                 @Override public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
-                    result.add(new Layer(resource, r.offX, r.offY));
-                    if (++count[0] == total) cb.onReady(result);
+                    slots[idx] = new Layer(resource, r.offX, r.offY);
+                    if (++count[0] == total) {
+                        List<Layer> out = new ArrayList<>();
+                        for (Layer l : slots) if (l != null) out.add(l);
+                        cb.onReady(out);
+                    }
                 }
-                @Override public void onLoadCleared(@Nullable Drawable placeholder) { }
+                @Override public void onLoadCleared(@Nullable Drawable placeholder) {
+                    if (++count[0] == total) {
+                        List<Layer> out = new ArrayList<>();
+                        for (Layer l : slots) if (l != null) out.add(l);
+                        cb.onReady(out);
+                    }
+                }
             });
         }
     }

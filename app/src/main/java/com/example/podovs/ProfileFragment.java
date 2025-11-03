@@ -230,12 +230,12 @@ public class ProfileFragment extends BottomSheetDialogFragment {
                                             @Nullable String cabezaId) {
         if (!isAdded()) return;
 
-        // Obtener assets (pueden ser nombres o URLs) + offsets
         ArrayList<LayerReq> reqs = new ArrayList<>();
+        // ORDEN CORRECTO SIEMPRE
         addReq(qs, reqs, pielId);
+        addReq(qs, reqs, zapasId);
         addReq(qs, reqs, pantalonId);
         addReq(qs, reqs, remeraId);
-        addReq(qs, reqs, zapasId);
         addReq(qs, reqs, cabezaId);
 
         if (reqs.isEmpty()) {
@@ -243,8 +243,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
             if (def != 0) ivAvatar.setImageResource(def);
             return;
         }
-
-        // Cargar drawables (local o URL) y compositar
         loadAllDrawables(reqs, layers -> composeAndShow(layers));
     }
 

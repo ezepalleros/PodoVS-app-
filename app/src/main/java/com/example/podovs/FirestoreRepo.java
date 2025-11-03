@@ -36,7 +36,8 @@ public class FirestoreRepo {
 
     // -------- Starter pack --------
     private static final String[] STARTER_IDS = {
-            "cos_id_1","cos_id_2","cos_id_3","cos_id_4","cos_id_5","cos_id_6","cos_id_7"
+            "cos_id_1","cos_id_2","cos_id_3","cos_id_4","cos_id_5","cos_id_6","cos_id_7",
+            "cos_id_13","cos_id_14","cos_id_15"
     };
     private static final String DEFAULT_SKIN_ID = "cos_id_2";
 
