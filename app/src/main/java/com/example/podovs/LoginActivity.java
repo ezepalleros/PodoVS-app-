@@ -62,10 +62,15 @@ public class LoginActivity extends AppCompatActivity {
                         return;
                     }
                     String uid = fu.getUid();
-                    // Traer (o crear) el documento del usuario y continuar
                     repo.getUser(uid,
                             (DocumentSnapshot snap) -> {
+                                btnIngresar.setEnabled(true);
                                 if (snap.exists()) {
+                                    Boolean suspendido = snap.getBoolean("usu_suspendido");
+                                    if (Boolean.TRUE.equals(suspendido)) {
+                                        Toast.makeText(this, "Tu cuenta está suspendida.", Toast.LENGTH_LONG).show();
+                                        return;
+                                    }
                                     continueToMain(uid, snap.getString("usu_nombre"));
                                 } else {
                                     // Onboarding para inicializar perfil

@@ -85,6 +85,9 @@ public class FirestoreRepo {
         data.put("usu_saldo", 0L);
         data.put("usu_nivel", 1);
         data.put("usu_difi", dif.toLowerCase());
+        // NUEVOS CAMPOS
+        data.put("usu_rol", "user");
+        data.put("usu_suspendido", false);
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("km_semana", 0.0);
@@ -117,7 +120,7 @@ public class FirestoreRepo {
                 .addOnFailureListener(err);
     }
 
-    /** Garantiza campos y borra legados. */
+    /** Garantiza campos, corrige legados y fuerza invariante km_total >= km_semana. */
     public void ensureStats(@NonNull String uid) {
         DocumentReference ref = userDoc(uid);
         ref.get().addOnSuccessListener(snap -> {
@@ -140,6 +143,17 @@ public class FirestoreRepo {
             ensureMissingLong  (snap, up, "usu_stats.metas_diarias_total",  0L);
             ensureMissingLong  (snap, up, "usu_stats.metas_semana_total",   0L);
             if (!up.isEmpty()) ref.update(up);
+
+            // Fuerza el invariante si venía roto
+            db.runTransaction((Transaction.Function<Void>) tr -> {
+                DocumentSnapshot s = tr.get(ref);
+                double sem = (s.getDouble("usu_stats.km_semana") == null) ? 0.0 : s.getDouble("usu_stats.km_semana");
+                double tot = (s.getDouble("usu_stats.km_total")  == null) ? 0.0 : s.getDouble("usu_stats.km_total");
+                if (sem > tot) {
+                    tr.update(ref, "usu_stats.km_total", sem);
+                }
+                return null;
+            });
         });
     }
 
@@ -169,19 +183,38 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---------- Distancias ----------
+    // ---------- Distancias (mantener km_total >= km_semana) ----------
     public void setKmSemana(@NonNull String uid, double km,
                             @NonNull OnSuccessListener<Void> ok,
                             @NonNull OnFailureListener err) {
-        userDoc(uid).update("usu_stats.km_semana", km)
-                .addOnSuccessListener(ok).addOnFailureListener(err);
+        DocumentReference ref = userDoc(uid);
+        db.runTransaction((Transaction.Function<Void>) tr -> {
+            DocumentSnapshot s = tr.get(ref);
+            double tot = (s.getDouble("usu_stats.km_total") == null) ? 0.0 : s.getDouble("usu_stats.km_total");
+            double nuevoSem = Math.max(0.0, km);
+            double nuevoTot = Math.max(tot, nuevoSem); // nunca menor que semana
+            Map<String, Object> up = new HashMap<>();
+            up.put("usu_stats.km_semana", nuevoSem);
+            up.put("usu_stats.km_total", nuevoTot);
+            tr.update(ref, up);
+            return null;
+        }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
+
     public void setKmTotal(@NonNull String uid, double km,
                            @NonNull OnSuccessListener<Void> ok,
                            @NonNull OnFailureListener err) {
-        userDoc(uid).update("usu_stats.km_total", km)
-                .addOnSuccessListener(ok).addOnFailureListener(err);
+        DocumentReference ref = userDoc(uid);
+        db.runTransaction((Transaction.Function<Void>) tr -> {
+            DocumentSnapshot s = tr.get(ref);
+            double sem = (s.getDouble("usu_stats.km_semana") == null) ? 0.0 : s.getDouble("usu_stats.km_semana");
+            double nuevoTot = Math.max(0.0, km);
+            if (nuevoTot < sem) nuevoTot = sem; // forzar invariante
+            tr.update(ref, "usu_stats.km_total", nuevoTot);
+            return null;
+        }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
+
     public void addKmDelta(@NonNull String uid, double kmDelta,
                            @NonNull OnSuccessListener<Void> ok,
                            @NonNull OnFailureListener err) {
@@ -191,13 +224,17 @@ public class FirestoreRepo {
             DocumentSnapshot s = tr.get(ref);
             double curSem = (s.getDouble("usu_stats.km_semana") == null) ? 0.0 : s.getDouble("usu_stats.km_semana");
             double curTot = (s.getDouble("usu_stats.km_total")  == null) ? 0.0 : s.getDouble("usu_stats.km_total");
+            double nuevoSem = Math.max(0.0, curSem + kmDelta);
+            double nuevoTot = Math.max(0.0, curTot + kmDelta);
+            if (nuevoTot < nuevoSem) nuevoTot = nuevoSem; // seguridad extra
             Map<String, Object> up = new HashMap<>();
-            up.put("usu_stats.km_semana", Math.max(0.0, curSem + kmDelta));
-            up.put("usu_stats.km_total",  Math.max(0.0, curTot + kmDelta));
+            up.put("usu_stats.km_semana", nuevoSem);
+            up.put("usu_stats.km_total",  nuevoTot);
             tr.update(ref, up);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
+
     public void updateMayorPasosDiaIfGreater(@NonNull String uid, long candidate) {
         DocumentReference ref = userDoc(uid);
         db.runTransaction(tr -> {

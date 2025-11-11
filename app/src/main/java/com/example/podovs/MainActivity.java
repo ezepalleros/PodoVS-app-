@@ -9,6 +9,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -38,9 +39,9 @@ public class MainActivity extends AppCompatActivity {
 
     // ==== UI ====
     private TextView tvKmTotalBig;     // muestra pasos de hoy (número grande)
-    private TextView tvKmSemanaSmall;  // "Semana: xx.xx km"
     private ImageView ivAvatar;
     private TextView tvCoins;
+    private TextView tvKmSemanaSmall;  // lo ocultamos (pedido)
 
     // ==== Firestore / Repo ====
     private FirestoreRepo repo;
@@ -66,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
         return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE);
     }
 
-    // cache del servidor para semana
+    // cache del servidor para semana (ya no se muestra en UI, solo lógica interna)
     private double kmSemanaCache = 0.0;
 
     private final ActivityResultLauncher<String[]> permsLauncher =
@@ -91,6 +92,11 @@ public class MainActivity extends AppCompatActivity {
         tvCoins         = findViewById(R.id.tvCoins);
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
+        // Ocultar el texto de semana en la pantalla principal (pedido)
+        if (tvKmSemanaSmall != null) {
+            tvKmSemanaSmall.setVisibility(View.GONE);
+        }
+
         ivAvatar.setOnClickListener(v ->
                 startActivity(new Intent(this, AvatarActivity.class)));
 
@@ -114,28 +120,21 @@ public class MainActivity extends AppCompatActivity {
         repo.ensureStats(uid);
         repo.normalizeXpLevel(uid, v -> {}, e -> Log.w(TAG, "normalizeXpLevel: " + e.getMessage()));
 
-
-        // Listener del documento del usuario (saldo, km semana, equipamiento, etc.)
+        // Listener del documento del usuario (saldo y equipamiento)
         repo.listenUser(uid, (snap, err) -> {
             if (err != null) {
                 Log.w(TAG, "listenUser error: " + err.getMessage());
                 return;
             }
             if (snap != null && snap.exists()) {
-                // saldo
                 Long saldo = snap.getLong("usu_saldo");
                 if (saldo != null && tvCoins != null) {
                     tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
                 }
-                // km semana (dentro de usu_stats)
+                // mantenemos el cache para rollover aunque no lo mostremos
                 Double kmSemana = getNestedDouble(snap, "usu_stats.km_semana");
-                if (kmSemana != null) {
-                    kmSemanaCache = kmSemana;
-                    tvKmSemanaSmall.setText(
-                            String.format(Locale.getDefault(), "Semana: %.2f km", kmSemanaCache)
-                    );
-                }
-                // avatar segun equipamiento
+                if (kmSemana != null) kmSemanaCache = kmSemana;
+
                 renderAvatarFromUserSnapshot(snap);
             }
         });
@@ -167,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
         if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) {
             maybeRunRollover();
         }
-        updateSmallWeekAndBigStepsFromStorage();
+        updateBigStepsFromStorage();
     }
 
     @Override
@@ -176,7 +175,7 @@ public class MainActivity extends AppCompatActivity {
         if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) {
             maybeRunRollover();
         }
-        updateSmallWeekAndBigStepsFromStorage();
+        updateBigStepsFromStorage();
         secureStartSteps();
     }
 
@@ -320,22 +319,18 @@ public class MainActivity extends AppCompatActivity {
         long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
         double kmAgregar = pasosHoy * STEP_TO_KM;
 
-        // Sumar tanto a semana como a total usando la transacción que ya actualiza ambos
-        repo.addKmDelta(uid, kmAgregar,
-                v -> {},
-                e -> Log.w(TAG, "addKmDelta error: " + e.getMessage()));
+        // Sumar tanto a semana como a total (transacción que mantiene el invariante)
+        repo.addKmDelta(uid, kmAgregar, v -> {}, e -> Log.w(TAG, "addKmDelta error: " + e.getMessage()));
 
+        // actualizar cache para la próxima corrida (aunque no se muestra)
         double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
 
         repo.updateMayorPasosDiaIfGreater(uid, pasosHoy);
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
         if (diasContados >= 7) {
-            repo.setKmSemana(uid, 0.0,
-                    v -> {},
-                    e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
+            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
             kmSemanaCache = 0.0;
-            nuevoSem = 0.0;
             diasContados = 0;
         } else {
             kmSemanaCache = nuevoSem;
@@ -348,13 +343,11 @@ public class MainActivity extends AppCompatActivity {
                 .apply();
 
         tvKmTotalBig.setText(String.valueOf(0));
-        tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", nuevoSem));
     }
 
-    private void updateSmallWeekAndBigStepsFromStorage() {
+    private void updateBigStepsFromStorage() {
         long pasosHoy = userPrefs().getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosHoy));
-        tvKmSemanaSmall.setText(String.format(Locale.getDefault(), "Semana: %.2f km", kmSemanaCache));
     }
 
     @Nullable
