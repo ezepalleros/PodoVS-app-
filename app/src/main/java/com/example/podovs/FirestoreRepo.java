@@ -1,5 +1,6 @@
 package com.example.podovs;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 
 import com.google.android.gms.tasks.OnFailureListener;
@@ -26,6 +27,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import androidx.annotation.IntDef;
 
 public class FirestoreRepo {
 
@@ -548,4 +551,161 @@ public class FirestoreRepo {
                                            @NonNull EventListener<DocumentSnapshot> listener) {
         return userDoc(uid).addSnapshotListener(listener);
     }
+
+
+
+    // ---- Constantes de cofres ----
+    public static final int CHEST_T1 = 1; // 10k => premia items de 20k
+    public static final int CHEST_T2 = 2; // 25k => 50k
+    public static final int CHEST_T3 = 3; // 50k => 100k
+
+    @IntDef({CHEST_T1, CHEST_T2, CHEST_T3})
+    public @interface ChestTier {}
+
+    public com.google.android.gms.tasks.Task<List<DocumentSnapshot>> fetchShopPool() {
+        // cos_tienda = true AND cos_activo = true
+        return db.collection("cosmetics")
+                .whereEqualTo("cos_tienda", true)
+                .whereEqualTo("cos_activo", true)
+                .get()
+                .continueWith(t -> t.getResult().getDocuments());
+    }
+
+    public com.google.android.gms.tasks.Task<List<DocumentSnapshot>> fetchEventCosmetics() {
+        return db.collection("cosmetics")
+                .whereEqualTo("cos_evento", true)
+                .whereEqualTo("cos_activo", true)
+                .get()
+                .continueWith(t -> t.getResult().getDocuments());
+    }
+
+    /** Devuelve IDs de inventario del usuario (para marcar “ya lo tenés”). */
+    public com.google.android.gms.tasks.Task<List<String>> fetchAllInventoryIds(@NonNull String uid) {
+        return userDoc(uid).collection("my_cosmetics").get()
+                .continueWith(t -> {
+                    List<String> out = new ArrayList<>();
+                    for (DocumentSnapshot d : t.getResult().getDocuments()) out.add(d.getId());
+                    return out;
+                });
+    }
+
+    /** Compra directa (botón Comprar). Verifica saldo y duplicados. */
+    public void buyCosmetic(@NonNull String uid, @NonNull String cosId, long price,
+                            @NonNull OnSuccessListener<Void> ok, @NonNull OnFailureListener err) {
+        db.runTransaction((Transaction.Function<Void>) tr -> {
+            DocumentSnapshot u = tr.get(userDoc(uid));
+
+            // suspendido no compra
+            Boolean susp = u.getBoolean("usu_suspendido");
+            if (susp != null && susp) throw new IllegalStateException("Usuario suspendido.");
+
+            long saldo = (u.getLong("usu_saldo") == null) ? 0L : u.getLong("usu_saldo");
+            if (saldo < price) throw new IllegalStateException("Saldo insuficiente.");
+
+            // ya lo tiene?
+            DocumentSnapshot inv = tr.get(inventoryDoc(uid, cosId));
+            if (inv.exists()) throw new IllegalStateException("Ya posees este objeto.");
+
+            DocumentSnapshot cos = tr.get(cosmeticDoc(cosId));
+            if (!Boolean.TRUE.equals(cos.getBoolean("cos_activo")))
+                throw new IllegalStateException("No disponible.");
+
+            // debitar + agregar inventario (con cache)
+            tr.update(userDoc(uid), "usu_saldo", saldo - price,
+                    "usu_stats.objetos_comprados", FieldValue.increment(1));
+
+            Map<String,Object> cache = new HashMap<>();
+            cache.put("cos_asset", cos.getString("cos_asset"));
+            cache.put("cos_assetType", cos.getString("cos_assetType"));
+            cache.put("cos_nombre", cos.getString("cos_nombre"));
+            cache.put("cos_tipo", cos.getString("cos_tipo"));
+
+            Map<String,Object> sub = new HashMap<>();
+            sub.put("myc_cache", cache);
+            sub.put("myc_obtenido", FieldValue.serverTimestamp());
+            sub.put("myc_equipped", false);
+            tr.set(inventoryDoc(uid, cosId), sub);
+
+            return null;
+        }).addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    // ---- Cofres ----
+    public static class ChestResult {
+        public final boolean duplicated;
+        public final String cosmeticId;
+        public final String cosmeticName;
+        public final long refundGranted;
+        ChestResult(boolean duplicated, String cosmeticId, String cosmeticName, long refundGranted) {
+            this.duplicated = duplicated; this.cosmeticId = cosmeticId; this.cosmeticName = cosmeticName; this.refundGranted = refundGranted;
+        }
+    }
+
+    public void openChest(@NonNull String uid, @ChestTier int tier,
+                          @NonNull OnSuccessListener<ChestResult> ok,
+                          @NonNull OnFailureListener err) {
+
+        long chestCost;
+        long prizePrice; // precio de los ítems que pueden tocar
+        long refund;
+
+        if (tier == CHEST_T1) { chestCost = 10_000; prizePrice = 20_000; refund = 5_000; }
+        else if (tier == CHEST_T2) { chestCost = 25_000; prizePrice = 50_000; refund = 12_000; }
+        else { chestCost = 50_000; prizePrice = 100_000; refund = 25_000; }
+
+        // Traigo candidatos por precio
+        db.collection("cosmetics")
+                .whereEqualTo("cos_precio", prizePrice)
+                .whereEqualTo("cos_activo", true)
+                .get()
+                .addOnSuccessListener(qs -> {
+                    List<DocumentSnapshot> all = qs.getDocuments();
+                    if (all.isEmpty()) { err.onFailure(new IllegalStateException("Sin premios disponibles.")); return; }
+
+                    // elijo random en cliente
+                    DocumentSnapshot chosen = all.get(new Random().nextInt(all.size()));
+                    String cosId = chosen.getId();
+                    String cosName = chosen.getString("cos_nombre");
+
+                    db.runTransaction((Transaction.Function<ChestResult>) tr -> {
+                        DocumentSnapshot u = tr.get(userDoc(uid));
+
+                        Boolean susp = u.getBoolean("usu_suspendido");
+                        if (susp != null && susp) throw new IllegalStateException("Usuario suspendido.");
+
+                        long saldo = (u.getLong("usu_saldo") == null) ? 0L : u.getLong("usu_saldo");
+                        if (saldo < chestCost) throw new IllegalStateException("Saldo insuficiente.");
+
+                        DocumentSnapshot inv = tr.get(inventoryDoc(uid, cosId));
+                        if (inv.exists()) {
+                            // Duplicado -> cobro cofre y devuelvo mitad
+                            long nuevo = (saldo - chestCost) + refund;
+                            if (nuevo < 0) nuevo = 0;
+                            tr.update(userDoc(uid), "usu_saldo", nuevo);
+                            return new ChestResult(true, cosId, cosName == null ? "-" : cosName, refund);
+                        } else {
+                            // Restar costo, dar item
+                            tr.update(userDoc(uid),
+                                    "usu_saldo", saldo - chestCost,
+                                    "usu_stats.objetos_comprados", FieldValue.increment(1));
+
+                            Map<String,Object> cache = new HashMap<>();
+                            cache.put("cos_asset", chosen.getString("cos_asset"));
+                            cache.put("cos_assetType", chosen.getString("cos_assetType"));
+                            cache.put("cos_nombre", cosName);
+                            cache.put("cos_tipo", chosen.getString("cos_tipo"));
+
+                            Map<String,Object> sub = new HashMap<>();
+                            sub.put("myc_cache", cache);
+                            sub.put("myc_obtenido", FieldValue.serverTimestamp());
+                            sub.put("myc_equipped", false);
+                            tr.set(inventoryDoc(uid, cosId), sub);
+
+                            return new ChestResult(false, cosId, cosName == null ? "-" : cosName, 0L);
+                        }
+                    }).addOnSuccessListener(ok).addOnFailureListener(err);
+                })
+                .addOnFailureListener(err);
+    }
+
 }

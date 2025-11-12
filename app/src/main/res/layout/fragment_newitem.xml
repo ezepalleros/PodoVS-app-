@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/newItemRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="@android:color/white">
+
+    <!-- Título -->
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="¡Nuevo cosmético!"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="#111827"
+        android:paddingBottom="8dp" />
+
+    <!-- Subtítulo / nombre del ítem -->
+    <TextView
+        android:id="@+id/tvSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Nombre del cosmético"
+        android:textSize="14sp"
+        android:textColor="#4B5563" />
+
+    <!-- Imagen del ítem -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:layout_marginTop="16dp"
+        android:background="#F3F4F6"
+        android:clipToPadding="false"
+        android:padding="12dp">
+
+        <ImageView
+            android:id="@+id/ivNewItem"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:adjustViewBounds="true"
+            android:scaleType="centerInside"
+            android:src="@drawable/pixel_chest" />
+    </FrameLayout>
+
+    <!-- Botón principal: “Reclamar” o “Qué mal” (según sea nuevo o repetido) -->
+    <Button
+        android:id="@+id/btnPrimary"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:text="Reclamar"
+        android:textAllCaps="false"
+        android:textStyle="bold"
+        android:textColor="@android:color/white"
+        android:backgroundTint="#8B5CF6" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="8dp" />
+</LinearLayout>

@@ -157,6 +157,10 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopOptions).setOnClickListener(v ->
                 Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
+        // --- Bottom bar: abrir ShopActivity ---
+        findViewById(R.id.btnShop).setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, ShopActivity.class)));
+
         getSupportFragmentManager().setFragmentResultListener(
                 "coins_changed", this, (requestKey, bundle) -> { /* no-op */ }
         );
