@@ -35,6 +35,7 @@ public class FirestoreRepo {
     private final FirebaseAuth auth;
 
     private static final int XP_PER_LEVEL = 100;
+    private static final long WEEK_MS = 7L * 24L * 60L * 60L * 1000L;
 
     private static final String[] STARTER_IDS = {
             "cos_id_1","cos_id_2","cos_id_3","cos_id_4","cos_id_5","cos_id_6","cos_id_7",
@@ -276,6 +277,61 @@ public class FirestoreRepo {
                               @NonNull OnSuccessListener<Void> ok,
                               @NonNull OnFailureListener err) {
         syncGoalsWithDifficulty(uid, nuevaDifi, ok, err);
+    }
+
+    /**
+     * Cambia dificultad respetando cooldown de 1 semana.
+     * Usa campo: usu_difi_changed_at (epoch millis).
+     */
+    public void changeDifficultyWithCooldown(@NonNull String uid, @NonNull String nuevaDifi,
+                                             @NonNull OnSuccessListener<Void> ok,
+                                             @NonNull OnFailureListener err) {
+        db.runTransaction((Transaction.Function<Void>) tr -> {
+            long now = System.currentTimeMillis();
+            DocumentReference ref = userDoc(uid);
+            DocumentSnapshot s = tr.get(ref);
+
+            Long lastChange = null;
+            Object v = s.get("usu_difi_changed_at");
+            if (v instanceof Number) lastChange = ((Number) v).longValue();
+
+            if (lastChange != null && now - lastChange < WEEK_MS) {
+                throw new IllegalStateException("Solo podés cambiar la dificultad una vez por semana.");
+            }
+
+            int nivel = (s.getLong("usu_nivel") == null) ? 1 : s.getLong("usu_nivel").intValue();
+            long diaria  = dailyFor(nivel, nuevaDifi);
+            long semanal = weeklyFor(nivel, nuevaDifi);
+
+            Map<String,Object> up = new HashMap<>();
+            up.put("usu_difi", nuevaDifi.toLowerCase());
+            up.put("usu_stats.meta_diaria_pasos",  diaria);
+            up.put("usu_stats.meta_semanal_pasos", semanal);
+            up.put("usu_difi_changed_at", now);
+
+            tr.update(ref, up);
+            return null;
+        }).addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    /**
+     * Reinicia nivel y metas (sin tocar saldo ni otras stats).
+     * usu_nivel = 1
+     * meta_diaria = 1000
+     * meta_semanal = 10000
+     */
+    public void resetLevelAndGoals(@NonNull String uid,
+                                   @NonNull OnSuccessListener<Void> ok,
+                                   @NonNull OnFailureListener err) {
+        db.runTransaction((Transaction.Function<Void>) tr -> {
+            DocumentReference ref = userDoc(uid);
+            Map<String,Object> up = new HashMap<>();
+            up.put("usu_nivel", 1);
+            up.put("usu_stats.meta_diaria_pasos", 1000L);
+            up.put("usu_stats.meta_semanal_pasos", 10000L);
+            tr.update(ref, up);
+            return null;
+        }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
     public void forceRecalcGoals(@NonNull String uid,

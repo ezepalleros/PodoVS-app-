@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootOverlayOptions"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#80000000"
+    android:padding="20dp">
+
+    <!-- Ventana modal centrada, estilo similar a notificaciones -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cardOptions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        app:cardBackgroundColor="#2B2B2F"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/tvTitleOptions"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Opciones"
+                    android:textColor="@android:color/white"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnClose"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@android:color/transparent"
+                    android:padding="4dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:tint="@android:color/white" />
+            </LinearLayout>
+
+            <!-- Separador -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp"
+                android:background="#33FFFFFF" />
+
+            <!-- Sección dificultad -->
+            <TextView
+                android:id="@+id/tvCurrentDif"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Dificultad actual: -"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tvCooldownInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" "
+                android:textColor="#CCCCCC"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btnDifBajo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Bajo"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/black"
+                    android:backgroundTint="#6FE6B7" />
+
+                <Button
+                    android:id="@+id/btnDifMedio"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:text="Medio"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/black"
+                    android:backgroundTint="#FFC107" />
+
+                <Button
+                    android:id="@+id/btnDifAlto"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Alto"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:backgroundTint="#F44336" />
+            </LinearLayout>
+
+            <!-- Separador -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="12dp"
+                android:background="#33FFFFFF" />
+
+            <!-- Reset nivel / metas -->
+            <TextView
+                android:id="@+id/tvResetLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Reiniciar progreso de nivel:"
+                android:textColor="@android:color/white"
+                android:textSize="15sp"
+                android:layout_marginBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnResetProgress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Reiniciar nivel y metas"
+                android:textAllCaps="false"
+                android:textStyle="bold"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:backgroundTint="#FF9800"
+                android:textColor="@android:color/white" />
+
+            <TextView
+                android:id="@+id/tvResetInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tocá 3 veces para reiniciar nivel y metas."
+                android:textColor="#FFCC80"
+                android:textSize="13sp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="4dp" />
+
+            <!-- Separador -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="12dp"
+                android:background="#33FFFFFF" />
+
+            <!-- Logout -->
+            <Button
+                android:id="@+id/btnLogout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Cerrar sesión"
+                android:textAllCaps="false"
+                android:textStyle="bold"
+                android:backgroundTint="#B71C1C"
+                android:textColor="@android:color/white" />
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+</FrameLayout>

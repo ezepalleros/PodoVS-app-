@@ -35,6 +35,19 @@ public class LoginActivity extends AppCompatActivity {
 
         repo = new FirestoreRepo();
 
+        // --- Auto-login si ya hay sesión guardada y usuario de Firebase ---
+        SharedPreferences sp = getSharedPreferences("session", MODE_PRIVATE);
+        String savedUid   = sp.getString("uid", null);
+        String savedName  = sp.getString("user_name", "Jugador");
+        FirebaseUser fu   = repo.currentUser();
+
+        if (fu != null && savedUid != null && !savedUid.isEmpty()) {
+            // Ya autenticado y con sesión -> ir directo al Main
+            continueToMain(savedUid, savedName);
+            finish();
+            return;
+        }
+
         btnIngresar.setOnClickListener(v -> intentarLogin());
 
         tvRegister.setOnClickListener(v ->

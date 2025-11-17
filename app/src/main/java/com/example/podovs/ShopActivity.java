@@ -30,12 +30,19 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
-import androidx.core.content.ContextCompat;
 
 import com.bumptech.glide.Glide;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.rewarded.RewardItem;
+import com.google.android.gms.ads.rewarded.RewardedAd;
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.firebase.BuildConfig;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -49,13 +56,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Tienda en una sola Activity + activity_shop.xml
- * - Rotación REAL cada 3 horas (estable dentro del mismo tramo)
- * - Selección determinística por usuario (seed = slot^uidHash)
- * - Cuenta regresiva visible junto a "Ofertas"
- * - Fondos animados "lluvia" por sección (dispersa)
- */
 public class ShopActivity extends AppCompatActivity {
 
     private FirebaseFirestore db;
@@ -67,32 +67,32 @@ public class ShopActivity extends AppCompatActivity {
     private LinearLayout rowChests;
     private GridLayout gridEventos;
 
-    // Header ofertas
     private TextView tvRotationTitle;
     private TextView tvRotationTimer;
 
-    // Contenedores de cada sección para la lluvia
     private ViewGroup sectionRotation;
     private ViewGroup sectionChests;
     private ViewGroup sectionEvents;
 
     // ======= Cofres =======
-    private static final int PRICE_BRONZE = 10000;   // premios 20k
-    private static final int PRICE_SILVER = 25000;   // premios 50k
-    private static final int PRICE_GOLD   = 50000;   // premios 100k
+    private static final int PRICE_BRONZE = 10000;   // referencia visual
+    private static final int PRICE_SILVER = 25000;
+    private static final int PRICE_GOLD   = 50000;
 
     private static final int POOL_BRONZE  = 20000;
     private static final int POOL_SILVER  = 50000;
     private static final int POOL_GOLD    = 100000;
 
-    // ======= Paleta directa (sin R.color) =======
-    private static final int COL_BG_CARD     = Color.parseColor("#F3F4F6");
-    private static final int COL_TEXT_DARK   = Color.parseColor("#111827");
-    private static final int COL_TEXT_MEDIUM = Color.parseColor("#4B5563");
-    private static final int COL_BTN_LILAC   = Color.parseColor("#8B5CF6");
-    private static final int COL_BTN_DISABLED= Color.parseColor("#9CA3AF");
+    // Paleta
+    private static final int COL_BG_CARD      = Color.parseColor("#F3F4F6");
+    private static final int COL_TEXT_DARK    = Color.parseColor("#111827");
+    private static final int COL_TEXT_MEDIUM  = Color.parseColor("#4B5563");
+    private static final int COL_BTN_LILAC    = Color.parseColor("#8B5CF6");
+    private static final int COL_BTN_DISABLED = Color.parseColor("#9CA3AF");
+    // NUEVO: verde para el cofre de anuncios cuando haya anuncio cargado
+    private static final int COL_BTN_GREEN    = Color.parseColor("#22C55E");
 
-    // ======= Rotación 3h (ticker) =======
+    // Rotación 3h
     private long lastSeed = -1L;
     private Handler handler;
     private final Runnable ticker = new Runnable() {
@@ -107,10 +107,26 @@ public class ShopActivity extends AppCompatActivity {
         }
     };
 
-    // ======= Prefs (persistir la selección del tramo actual) =======
     private static final String PREF_SHOP  = "shop_rotation_local";
     private static final String KEY_SEED   = "rot_seed";
-    private static final String KEY_IDS    = "rot_ids"; // csv 3 ids
+    private static final String KEY_IDS    = "rot_ids";
+
+    // ======= Ads recompensados (cofre 10k) =======
+    private static final String REWARDED_AD_UNIT_ID_BRONZE =
+            BuildConfig.DEBUG
+                    ? "ca-app-pub-3940256099942544/5224354917" // TEST (Rewarded)
+                    : "ca-app-pub-1198349658294342/3811853152"; // TU unidad real
+
+    private RewardedAd rewardedBronzeAd;
+    private boolean isLoadingBronzeAd = false;
+
+    private static final String PREF_REWARDED_BRONZE = "shop_rewarded_bronze";
+    private static final String KEY_DAY_INDEX = "day_index";
+    private static final String KEY_COUNT     = "count";
+    private static final int MAX_BRONZE_ADS_PER_DAY = 3;
+
+    private Button btnBronzeChest;
+    private TextView tvBronzePrice;   // para mostrar "10,000 (X)"
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -131,7 +147,6 @@ public class ShopActivity extends AppCompatActivity {
         tvRotationTitle = findViewById(R.id.tvRotationTitle);
         tvRotationTimer = findViewById(R.id.tvRotationTimer);
 
-        // Secciones para el fondo animado (más disperso)
         sectionRotation = findViewById(R.id.sectionRotation);
         sectionChests   = findViewById(R.id.sectionChests);
         sectionEvents   = findViewById(R.id.sectionEvents);
@@ -140,20 +155,21 @@ public class ShopActivity extends AppCompatActivity {
         attachRain(sectionChests,   R.drawable.icon_chest, 0xFFFFF4CC);
         attachRain(sectionEvents,   R.drawable.icon_event, 0xFFE5F0FF);
 
-        // Saldo en vivo
         repo.listenUser(uid, (snap, err) -> {
             if (err != null || snap == null || !snap.exists()) return;
             Long saldo = snap.getLong("usu_saldo");
             if (saldo != null) tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
         });
 
-        // Cargar secciones
+        // Inicializar AdMob
+        MobileAds.initialize(this, status -> {});
+        loadRewardedBronzeAd();
+
         lastSeed = computedSeed();
         loadDailyShop();
         setupChests();
         loadEventos();
 
-        // Bottom bar
         ImageButton btnHome = findViewById(R.id.btnHome);
         ImageButton btnShop = findViewById(R.id.btnShop);
         ImageButton btnVs   = findViewById(R.id.btnVs);
@@ -173,6 +189,7 @@ public class ShopActivity extends AppCompatActivity {
         if (handler == null) handler = new Handler();
         handler.removeCallbacks(ticker);
         handler.post(ticker);
+        refreshBronzeButtonState();
     }
 
     @Override
@@ -202,7 +219,8 @@ public class ShopActivity extends AppCompatActivity {
         long s = (remain % 60_000) / 1000;
 
         if (tvRotationTitle != null) tvRotationTitle.setText("Ofertas (rota cada 3 hs)");
-        if (tvRotationTimer != null) tvRotationTimer.setText(String.format(Locale.getDefault(), "%01d:%02d:%02d", h, m, s));
+        if (tvRotationTimer != null) tvRotationTimer.setText(
+                String.format(Locale.getDefault(), "%01d:%02d:%02d", h, m, s));
     }
 
     private void safeNavigate(String className, String msgIfMissing) {
@@ -210,7 +228,7 @@ public class ShopActivity extends AppCompatActivity {
         catch (ClassNotFoundException e) { Toast.makeText(this, msgIfMissing, Toast.LENGTH_SHORT).show(); }
     }
 
-    // ==================== Ofertas (3) ====================
+    // ==================== Ofertas ====================
     private void loadDailyShop() {
         SharedPreferences p = getSharedPreferences(PREF_SHOP + "_" + uid, MODE_PRIVATE);
         long storedSeed = p.getLong(KEY_SEED, -1);
@@ -297,18 +315,19 @@ public class ShopActivity extends AppCompatActivity {
         return b;
     }
 
-    // ==================== Cofres (3) ====================
+    // ==================== Cofres ====================
     private void setupChests() {
         rowChests.removeAllViews();
-        rowChests.addView(makeChestCard(PRICE_BRONZE, POOL_BRONZE));
-        rowChests.addView(makeChestCard(PRICE_SILVER, POOL_SILVER));
-        rowChests.addView(makeChestCard(PRICE_GOLD,   POOL_GOLD));
+        rowChests.addView(makeChestCard(PRICE_BRONZE, POOL_BRONZE, FirestoreRepo.CHEST_T1));
+        rowChests.addView(makeChestCard(PRICE_SILVER, POOL_SILVER, FirestoreRepo.CHEST_T2));
+        rowChests.addView(makeChestCard(PRICE_GOLD,   POOL_GOLD,   FirestoreRepo.CHEST_T3));
     }
 
-    private View makeChestCard(int price, int poolPrice) {
+    private View makeChestCard(int price, int poolPrice, int tier) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp.setMargins(dp(6), dp(6), dp(6), dp(6));
         root.setLayoutParams(lp);
 
@@ -323,23 +342,24 @@ public class ShopActivity extends AppCompatActivity {
         ImageView iv = new ImageView(this);
         iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         iv.setAdjustViewBounds(true);
-        iv.setImageResource(R.drawable.pixel_chest);
+        // NUEVO: usar pixel_ad para el cofre de anuncios (10k) y pixel_chest para los demás
+        int imgRes = (tier == FirestoreRepo.CHEST_T1)
+                ? R.drawable.pixel_ad
+                : R.drawable.pixel_chest;
+        iv.setImageResource(imgRes);
         card.addView(iv);
 
         TextView tvPrice = new TextView(this);
-        tvPrice.setText(String.format(Locale.getDefault(), "%,d", price));
         tvPrice.setTypeface(Typeface.DEFAULT_BOLD);
         tvPrice.setTextColor(COL_TEXT_DARK);
         tvPrice.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         tvPrice.setPadding(0, dp(6), 0, 0);
 
         TextView tvSub = new TextView(this);
-        tvSub.setText("Premios de " + String.format(Locale.getDefault(), "%,d", poolPrice));
         tvSub.setTextColor(COL_TEXT_MEDIUM);
         tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
 
         Button btn = new Button(this);
-        btn.setText("Abrir");
         btn.setAllCaps(false);
         btn.setTextColor(Color.WHITE);
         btn.setTypeface(Typeface.DEFAULT_BOLD);
@@ -348,7 +368,22 @@ public class ShopActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
         lpBtn.setMargins(0, dp(8), 0, 0);
         btn.setLayoutParams(lpBtn);
-        btn.setOnClickListener(v -> openChest(price, poolPrice));
+
+        if (tier == FirestoreRepo.CHEST_T1) {
+            // BRONCE: Gratis con anuncio recompensado
+            tvBronzePrice = tvPrice;
+            tvSub.setText("Premios de 20000");
+
+            btnBronzeChest = btn;
+            btn.setOnClickListener(v -> showBronzeRewardedAd());
+
+            refreshBronzeButtonState(); // actualiza texto y estado
+        } else {
+            tvPrice.setText(String.format(Locale.getDefault(), "%,d", price));
+            tvSub.setText("Premios de " + String.format(Locale.getDefault(), "%,d", poolPrice));
+            btn.setText("Abrir");
+            btn.setOnClickListener(v -> openChest(price, poolPrice));
+        }
 
         root.addView(card);
         root.addView(tvPrice);
@@ -360,55 +395,215 @@ public class ShopActivity extends AppCompatActivity {
     private void openChest(int chestPrice, int prizePrice) {
         repo.getUser(uid, user -> {
             long saldo = user.getLong("usu_saldo") == null ? 0L : user.getLong("usu_saldo");
-            if (saldo < chestPrice) { Toast.makeText(this, "Saldo insuficiente.", Toast.LENGTH_SHORT).show(); return; }
+            if (chestPrice > 0 && saldo < chestPrice) {
+                Toast.makeText(this, "Saldo insuficiente.", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
-            repo.addSaldo(uid, -chestPrice, v1 -> {
-                db.collection("cosmetics")
-                        .whereEqualTo("cos_activo", true)
-                        .whereEqualTo("cos_precio", prizePrice)
-                        .get()
-                        .addOnSuccessListener(qs -> {
-                            List<DocumentSnapshot> pool = qs.getDocuments();
-                            if (pool.isEmpty()) {
-                                repo.addSaldo(uid, chestPrice, vv -> {}, ee -> {});
-                                Toast.makeText(this, "Sin premios disponibles.", Toast.LENGTH_SHORT).show();
-                                return;
-                            }
-                            DocumentSnapshot prize = pool.get(new SecureRandom().nextInt(pool.size()));
-                            String cosId = prize.getId();
-
-                            db.collection("users").document(uid)
-                                    .collection("my_cosmetics").document(cosId)
-                                    .get().addOnSuccessListener(s -> {
-                                        boolean already = s.exists();
-                                        if (already) {
-                                            int refund = chestPrice / 2;
-                                            repo.addSaldo(uid, refund,
-                                                    v2 -> {
-                                                        showNewItemDialog(false, prize);
-                                                        Toast.makeText(this, "Repetido. Devolución de " + refund, Toast.LENGTH_SHORT).show();
-                                                    },
-                                                    e2 -> Toast.makeText(this, "Error devolución.", Toast.LENGTH_SHORT).show());
-                                        } else {
-                                            repo.addToInventory(uid, cosId, false,
-                                                    v2 -> {
-                                                        showNewItemDialog(true, prize);
-                                                        Toast.makeText(this, "¡Nuevo cosmético!", Toast.LENGTH_SHORT).show();
-                                                    },
-                                                    e2 -> {
-                                                        repo.addSaldo(uid, chestPrice, v3 -> {}, e3 -> {});
-                                                        Toast.makeText(this, "Error al entregar.", Toast.LENGTH_LONG).show();
-                                                    });
-                                        }
-                                    });
-                        })
-                        .addOnFailureListener(e -> {
-                            repo.addSaldo(uid, chestPrice, vv -> {}, ee -> {});
-                            Toast.makeText(this, "Error cargando premios.", Toast.LENGTH_SHORT).show();
-                        });
-            }, e -> Toast.makeText(this, "Error al descontar saldo.", Toast.LENGTH_SHORT).show());
+            // Si chestPrice es 0 (cofre con anuncio), no descontamos nada
+            if (chestPrice > 0) {
+                repo.addSaldo(uid, -chestPrice, v1 -> abrirCofreConPool(chestPrice, prizePrice),
+                        e -> Toast.makeText(this, "Error al descontar saldo.", Toast.LENGTH_SHORT).show());
+            } else {
+                abrirCofreConPool(0, prizePrice);
+            }
 
         }, e -> Toast.makeText(this, "Error usuario.", Toast.LENGTH_SHORT).show());
+    }
+
+    private void abrirCofreConPool(int chestPrice, int prizePrice) {
+        db.collection("cosmetics")
+                .whereEqualTo("cos_activo", true)
+                .whereEqualTo("cos_precio", prizePrice)
+                .get()
+                .addOnSuccessListener(qs -> {
+                    List<DocumentSnapshot> pool = qs.getDocuments();
+                    if (pool.isEmpty()) {
+                        if (chestPrice > 0) {
+                            repo.addSaldo(uid, chestPrice, vv -> {}, ee -> {});
+                        }
+                        Toast.makeText(this, "Sin premios disponibles.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    DocumentSnapshot prize = pool.get(new SecureRandom().nextInt(pool.size()));
+                    String cosId = prize.getId();
+
+                    db.collection("users").document(uid)
+                            .collection("my_cosmetics").document(cosId)
+                            .get().addOnSuccessListener(s -> {
+                                boolean already = s.exists();
+                                if (already) {
+                                    int refund = chestPrice / 2;
+                                    if (refund > 0) {
+                                        repo.addSaldo(uid, refund,
+                                                v2 -> {
+                                                    showNewItemDialog(false, prize);
+                                                    Toast.makeText(this, "Repetido. Devolución de " + refund, Toast.LENGTH_SHORT).show();
+                                                },
+                                                e2 -> Toast.makeText(this, "Error devolución.", Toast.LENGTH_SHORT).show());
+                                    } else {
+                                        showNewItemDialog(false, prize);
+                                        Toast.makeText(this, "Cosmético repetido.", Toast.LENGTH_SHORT).show();
+                                    }
+                                } else {
+                                    repo.addToInventory(uid, cosId, false,
+                                            v2 -> {
+                                                showNewItemDialog(true, prize);
+                                                Toast.makeText(this, "¡Nuevo cosmético!", Toast.LENGTH_SHORT).show();
+                                            },
+                                            e2 -> {
+                                                if (chestPrice > 0) {
+                                                    repo.addSaldo(uid, chestPrice, v3 -> {}, e3 -> {});
+                                                }
+                                                Toast.makeText(this, "Error al entregar.", Toast.LENGTH_LONG).show();
+                                            });
+                                }
+                            });
+                })
+                .addOnFailureListener(e -> {
+                    if (chestPrice > 0) {
+                        repo.addSaldo(uid, chestPrice, vv -> {}, ee -> {});
+                    }
+                    Toast.makeText(this, "Error cargando premios.", Toast.LENGTH_SHORT).show();
+                });
+    }
+
+    // ==================== RewardedAd cofre 10k ====================
+
+    private long todayIndex() {
+        return System.currentTimeMillis() / 86_400_000L;
+    }
+
+    private int getBronzeAdsUsedToday() {
+        SharedPreferences p = getSharedPreferences(PREF_REWARDED_BRONZE, MODE_PRIVATE);
+        long storedDay = p.getLong(KEY_DAY_INDEX, -1L);
+        long today = todayIndex();
+        if (storedDay != today) {
+            p.edit()
+                    .putLong(KEY_DAY_INDEX, today)
+                    .putInt(KEY_COUNT, 0)
+                    .apply();
+            return 0;
+        }
+        return p.getInt(KEY_COUNT, 0);
+    }
+
+    private void incrementBronzeAdsUsedToday() {
+        SharedPreferences p = getSharedPreferences(PREF_REWARDED_BRONZE, MODE_PRIVATE);
+        long today = todayIndex();
+        long storedDay = p.getLong(KEY_DAY_INDEX, -1L);
+        int count = p.getInt(KEY_COUNT, 0);
+        if (storedDay != today) {
+            storedDay = today;
+            count = 0;
+        }
+        count++;
+        p.edit()
+                .putLong(KEY_DAY_INDEX, today)
+                .putInt(KEY_COUNT, count)
+                .apply();
+    }
+
+    private void loadRewardedBronzeAd() {
+        if (isLoadingBronzeAd) return;
+        isLoadingBronzeAd = true;
+
+        AdRequest adRequest = new AdRequest.Builder().build();
+        RewardedAd.load(
+                this,
+                REWARDED_AD_UNIT_ID_BRONZE,
+                adRequest,
+                new RewardedAdLoadCallback() {
+                    @Override
+                    public void onAdLoaded(RewardedAd ad) {
+                        rewardedBronzeAd = ad;
+                        isLoadingBronzeAd = false;
+                        if (btnBronzeChest != null) refreshBronzeButtonState();
+                    }
+
+                    @Override
+                    public void onAdFailedToLoad(LoadAdError loadAdError) {
+                        rewardedBronzeAd = null;
+                        isLoadingBronzeAd = false;
+                        if (btnBronzeChest != null) refreshBronzeButtonState();
+                        // Solo para debug visual
+                        Toast.makeText(ShopActivity.this,
+                                "No se pudo cargar el anuncio aún.",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
+    }
+
+    private void refreshBronzeButtonState() {
+        int used = getBronzeAdsUsedToday();
+        int remaining = MAX_BRONZE_ADS_PER_DAY - used;
+        if (remaining < 0) remaining = 0;
+
+        // Texto del precio como los otros, con paréntesis del resto
+        if (tvBronzePrice != null) {
+            String base = String.format(Locale.getDefault(), "%,d", PRICE_BRONZE);
+            tvBronzePrice.setText(base + " (" + remaining + ")");
+        }
+
+        if (btnBronzeChest == null) return;
+
+        if (remaining <= 0) {
+            btnBronzeChest.setEnabled(false);
+            btnBronzeChest.setBackgroundTintList(ColorStateList.valueOf(COL_BTN_DISABLED));
+            btnBronzeChest.setText("Sin usos hoy");
+            return;
+        }
+
+        btnBronzeChest.setEnabled(true);
+        // NUEVO: verde solo cuando haya anuncio cargado; si no, queda lila
+        if (rewardedBronzeAd != null) {
+            btnBronzeChest.setBackgroundTintList(ColorStateList.valueOf(COL_BTN_GREEN));
+        } else {
+            btnBronzeChest.setBackgroundTintList(ColorStateList.valueOf(COL_BTN_LILAC));
+        }
+        btnBronzeChest.setText("Gratis (" + remaining + " restantes)");
+    }
+
+    private void showBronzeRewardedAd() {
+        int used = getBronzeAdsUsedToday();
+        if (used >= MAX_BRONZE_ADS_PER_DAY) {
+            Toast.makeText(this, "Ya usaste los 3 anuncios de hoy.", Toast.LENGTH_SHORT).show();
+            refreshBronzeButtonState();
+            return;
+        }
+
+        if (rewardedBronzeAd == null) {
+            Toast.makeText(this, "Anuncio todavía no está listo, probá de nuevo en unos segundos.", Toast.LENGTH_SHORT).show();
+            loadRewardedBronzeAd();
+            return;
+        }
+
+        RewardedAd ad = rewardedBronzeAd;
+        rewardedBronzeAd = null;
+        refreshBronzeButtonState();
+
+        ad.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override
+            public void onAdDismissedFullScreenContent() {
+                loadRewardedBronzeAd();
+            }
+
+            @Override
+            public void onAdFailedToShowFullScreenContent(com.google.android.gms.ads.AdError adError) {
+                loadRewardedBronzeAd();
+            }
+        });
+
+        ad.show(this, new com.google.android.gms.ads.OnUserEarnedRewardListener() {
+            @Override
+            public void onUserEarnedReward(RewardItem rewardItem) {
+                incrementBronzeAdsUsedToday();
+                refreshBronzeButtonState();
+                // Abrimos cofre sin gastar saldo
+                openChest(0, POOL_BRONZE);
+            }
+        });
     }
 
     // ==================== Eventos ====================
@@ -439,11 +634,12 @@ public class ShopActivity extends AppCompatActivity {
                 });
     }
 
-    // ==================== Cards ====================
+    // ==================== Cards comunes ====================
     private View makeCosmeticCard(DocumentSnapshot d, boolean big) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp.setMargins(dp(6), dp(6), dp(6), dp(6));
         root.setLayoutParams(lp);
 
@@ -492,10 +688,16 @@ public class ShopActivity extends AppCompatActivity {
         name.setText(cosName);
         price.setText(cosPrice == null ? "-" : String.format(Locale.getDefault(), "%,d", cosPrice));
 
-        if ("cloudinary".equalsIgnoreCase(aType)) Glide.with(this).load(asset).error(android.R.drawable.ic_menu_report_image).into(iv);
-        else {
-            int resId = (!TextUtils.isEmpty(asset)) ? getResources().getIdentifier(asset, "drawable", getPackageName()) : 0;
-            iv.setImageResource(resId != 0 ? resId : android.R.drawable.ic_menu_report_image);
+        if ("cloudinary".equalsIgnoreCase(aType)) {
+            Glide.with(this).load(asset)
+                    .error(android.R.drawable.ic_menu_report_image).into(iv);
+        } else {
+            int resId = (!TextUtils.isEmpty(asset))
+                    ? getResources().getIdentifier(asset, "drawable", getPackageName())
+                    : 0;
+            iv.setImageResource(resId != 0
+                    ? resId
+                    : android.R.drawable.ic_menu_report_image);
         }
 
         db.collection("users").document(uid).collection("my_cosmetics").document(cosId)
@@ -570,10 +772,16 @@ public class ShopActivity extends AppCompatActivity {
         name.setText(cosName);
         price.setText(cosPrice == null ? "-" : String.format(Locale.getDefault(), "%,d", cosPrice));
 
-        if ("cloudinary".equalsIgnoreCase(aType)) Glide.with(this).load(asset).error(android.R.drawable.ic_menu_report_image).into(iv);
-        else {
-            int resId = (!TextUtils.isEmpty(asset)) ? getResources().getIdentifier(asset, "drawable", getPackageName()) : 0;
-            iv.setImageResource(resId != 0 ? resId : android.R.drawable.ic_menu_report_image);
+        if ("cloudinary".equalsIgnoreCase(aType)) {
+            Glide.with(this).load(asset)
+                    .error(android.R.drawable.ic_menu_report_image).into(iv);
+        } else {
+            int resId = (!TextUtils.isEmpty(asset))
+                    ? getResources().getIdentifier(asset, "drawable", getPackageName())
+                    : 0;
+            iv.setImageResource(resId != 0
+                    ? resId
+                    : android.R.drawable.ic_menu_report_image);
         }
 
         if (!owned) btn.setOnClickListener(v -> tryBuy(cosId, tipo, cosPrice == null ? 0L : cosPrice));
@@ -586,22 +794,23 @@ public class ShopActivity extends AppCompatActivity {
     }
 
     private void tryBuy(String cosId, String tipo, long price) {
-        if (price < 0) { Toast.makeText(this, "Precio inválido.", Toast.LENGTH_SHORT).show(); return; }
+        if (price < 0) {
+            Toast.makeText(this, "Precio inválido.", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
-        // >>> CAMBIO CLAVE: compra transaccional que SIEMPRE crea my_cosmetics <<<
         repo.buyCosmetic(uid, cosId, price,
-                v -> {
-                    // feedback visual cargando el doc para mostrarlo en el diálogo
-                    db.collection("cosmetics").document(cosId).get()
-                            .addOnSuccessListener(doc -> {
-                                if (doc != null && doc.exists()) showNewItemDialog(true, doc);
-                                Toast.makeText(this, "Comprado ✔", Toast.LENGTH_SHORT).show();
-                            });
-                },
-                e -> Toast.makeText(this, e.getMessage() == null ? "Error compra." : e.getMessage(), Toast.LENGTH_LONG).show());
+                v -> db.collection("cosmetics").document(cosId).get()
+                        .addOnSuccessListener(doc -> {
+                            if (doc != null && doc.exists()) showNewItemDialog(true, doc);
+                            Toast.makeText(this, "Comprado ✔", Toast.LENGTH_SHORT).show();
+                        }),
+                e -> Toast.makeText(this,
+                        e.getMessage() == null ? "Error compra." : e.getMessage(),
+                        Toast.LENGTH_LONG).show());
     }
 
-    // ==== BottomSheet de resultado de cofre usando fragment_newitem.xml ====
+    // ==== Dialog nuevo item ====
     private void showNewItemDialog(boolean isNew, DocumentSnapshot prizeDoc) {
         BottomSheetDialog dialog = new BottomSheetDialog(this);
         View view = LayoutInflater.from(this).inflate(R.layout.fragment_newitem, null, false);
@@ -622,10 +831,15 @@ public class ShopActivity extends AppCompatActivity {
         String aType = prizeDoc.getString("cos_assetType");
         if (iv != null) {
             if ("cloudinary".equalsIgnoreCase(aType)) {
-                Glide.with(this).load(asset).error(android.R.drawable.ic_menu_report_image).into(iv);
+                Glide.with(this).load(asset)
+                        .error(android.R.drawable.ic_menu_report_image).into(iv);
             } else {
-                int resId = (!TextUtils.isEmpty(asset)) ? getResources().getIdentifier(asset, "drawable", getPackageName()) : 0;
-                iv.setImageResource(resId != 0 ? resId : android.R.drawable.ic_menu_report_image);
+                int resId = (!TextUtils.isEmpty(asset))
+                        ? getResources().getIdentifier(asset, "drawable", getPackageName())
+                        : 0;
+                iv.setImageResource(resId != 0
+                        ? resId
+                        : android.R.drawable.ic_menu_report_image);
             }
         }
 
@@ -640,14 +854,13 @@ public class ShopActivity extends AppCompatActivity {
     }
     private int dp(int v) { return (int) (v * getResources().getDisplayMetrics().density); }
 
-    // ------------------ Fondo animado: "lluvia" (mejor dispersión) ------------------
+    // ===== Fondo animado =====
     private void attachRain(ViewGroup container, int iconRes, int pastelBackground) {
         if (container == null) return;
         container.setBackgroundColor(pastelBackground);
 
         RainView rain = new RainView(this);
         rain.setIcon(iconRes);
-        // menos tamaño, más elementos, más caída
         rain.setConfig(28, dp(14), dp(26), 4500);
 
         container.addView(rain, 0,
@@ -667,7 +880,7 @@ public class ShopActivity extends AppCompatActivity {
         private long lastTime = -1L;
         private float minSizePx = 18, maxSizePx = 28;
         private long travelMs = 4500;
-        private int bucketCount = 12; // distribuye X por buckets para evitar amontonamiento
+        private int bucketCount = 12;
 
         public RainView(android.content.Context ctx) { super(ctx); init(); }
         public RainView(android.content.Context ctx, @Nullable AttributeSet a) { super(ctx, a); init(); }
@@ -700,7 +913,6 @@ public class ShopActivity extends AppCompatActivity {
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
-            // distribuir por buckets en X
             bucketCount = (int) Math.max(8, Math.min(20, w / dp(24)));
             int perBucket = Math.max(1, drops.length / bucketCount);
             int i = 0;
@@ -711,7 +923,7 @@ public class ShopActivity extends AppCompatActivity {
                     drops[i] = randomDrop(w, h, bx0, bx1, true);
                 }
             }
-            while (i < drops.length) { // completar si faltaron
+            while (i < drops.length) {
                 drops[i++] = randomDrop(w, h, 0, w, true);
             }
         }
@@ -725,11 +937,9 @@ public class ShopActivity extends AppCompatActivity {
             d.x = Math.max(0, x0 + jitter);
             d.y = anywhereY ? (float) (Math.random() * h) : -d.size;
 
-            // velocidad vertical proporcional a altura
-            d.vy = (float) ((h + d.size) / (travelMs * (0.7 + Math.random() * 0.6))); // variación 0.7x-1.3x
-            // viento: leve drift a la derecha
-            d.vx = (float) (dp(10) / travelMs * (0.5 + Math.random())); // 0.5x-1.5x
-            d.alpha = (float) (0.35 + Math.random() * 0.55); // 35%-90% opacidad
+            d.vy = (float) ((h + d.size) / (travelMs * (0.7 + Math.random() * 0.6)));
+            d.vx = (float) (dp(10) / travelMs * (0.5 + Math.random()));
+            d.alpha = (float) (0.35 + Math.random() * 0.55);
             return d;
         }
 
@@ -752,7 +962,6 @@ public class ShopActivity extends AppCompatActivity {
                 d.x += d.vx * dt;
 
                 if (d.y - d.size > h || d.x - d.size > w) {
-                    // re-spawn arriba con nuevo bucket aleatorio
                     int b = (int) (Math.random() * bucketCount);
                     float bx0 = (w * b) / (float) bucketCount;
                     float bx1 = (w * (b + 1)) / (float) bucketCount;
@@ -765,5 +974,4 @@ public class ShopActivity extends AppCompatActivity {
             }
         }
     }
-    // ------------------ FIN lluvia ------------------
 }

@@ -178,8 +178,7 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopStats).setOnClickListener(v -> openStatsFragment());
         findViewById(R.id.btnTopProfile).setOnClickListener(v -> openProfileSheet());
         findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
-        findViewById(R.id.btnTopOptions).setOnClickListener(v ->
-                Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
+        findViewById(R.id.btnTopOptions).setOnClickListener(v -> openOptionsFragment());
 
         findViewById(R.id.btnShop).setOnClickListener(v ->
                 startActivity(new Intent(MainActivity.this, ShopActivity.class)));
@@ -255,6 +254,14 @@ public class MainActivity extends AppCompatActivity {
                         android.R.anim.fade_in, android.R.anim.fade_out)
                 .replace(R.id.root, new NotificationFragment())
                 .addToBackStack("notifications")
+                .commit();
+    }
+    private void openOptionsFragment() {
+        getSupportFragmentManager().beginTransaction()
+                .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
+                        android.R.anim.fade_in, android.R.anim.fade_out)
+                .replace(R.id.root, new OptionsFragment())
+                .addToBackStack("options")
                 .commit();
     }
 
