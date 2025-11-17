@@ -38,10 +38,10 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
 
     // ==== UI ====
-    private TextView tvKmTotalBig;     // muestra pasos de hoy (número grande)
+    private TextView tvKmTotalBig;
     private ImageView ivAvatar;
     private TextView tvCoins;
-    private TextView tvKmSemanaSmall;  // lo ocultamos (pedido)
+    private TextView tvKmSemanaSmall;
 
     // ==== Firestore / Repo ====
     private FirestoreRepo repo;
@@ -51,23 +51,25 @@ public class MainActivity extends AppCompatActivity {
     // ==== Steps ====
     private StepsManager stepsManager;
 
-    // ==== Prefs (aislados por usuario) ====
-    private static final double STEP_TO_KM = 0.0008; // 1 paso ~ 0.8 m
+    // ==== Prefs / flags ====
+    private static final double STEP_TO_KM = 0.0008;
 
     private static final String PREFS_GLOBAL = "podovs_global";
     private static final String KEY_LAST_UID = "last_uid";
 
     private static final String PREFS_PREFIX = "podovs_prefs_";
-    private static final String KEY_PASOS_HOY = "pasos_hoy"; // LONG
+    private static final String KEY_PASOS_HOY = "pasos_hoy";
     private static final String KEY_ULTIMO_DIA = "ultimo_dia";
     private static final String KEY_DIAS_CONTADOS = "dias_contados";
     private static final String KEY_FIRST_LOGIN_DONE = "first_login_done";
 
-    private SharedPreferences userPrefs() {
-        return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE);
-    }
+    // notificaciones
+    private static final String KEY_LAST_LEVEL = "last_seen_level";
+    private static final String KEY_NOTIF_DAILY_PREFIX = "notif_daily_";   // + yyyymmdd
+    private static final String KEY_NOTIF_WEEKLY_PREFIX = "notif_week_";   // + cycle string
 
-    // cache del servidor para semana (ya no se muestra en UI, solo lógica interna)
+    private SharedPreferences userPrefs() { return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE); }
+
     private double kmSemanaCache = 0.0;
 
     private final ActivityResultLauncher<String[]> permsLauncher =
@@ -92,15 +94,10 @@ public class MainActivity extends AppCompatActivity {
         tvCoins         = findViewById(R.id.tvCoins);
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
-        // Ocultar el texto de semana en la pantalla principal (pedido)
-        if (tvKmSemanaSmall != null) {
-            tvKmSemanaSmall.setVisibility(View.GONE);
-        }
+        if (tvKmSemanaSmall != null) tvKmSemanaSmall.setVisibility(View.GONE);
 
-        ivAvatar.setOnClickListener(v ->
-                startActivity(new Intent(this, AvatarActivity.class)));
+        ivAvatar.setOnClickListener(v -> startActivity(new Intent(this, AvatarActivity.class)));
 
-        // ==== Sesión Firebase ====
         SharedPreferences spSession = getSharedPreferences("session", MODE_PRIVATE);
         uid = spSession.getString("uid", null);
         if (uid == null || uid.isEmpty()) {
@@ -109,10 +106,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // ==== Aislar prefs por usuario y resetear si cambió ====
         ensurePerUserPrefsInitialized();
 
-        // ==== Repo Firestore ====
         repo = new FirestoreRepo();
         db   = FirebaseFirestore.getInstance();
 
@@ -120,7 +115,6 @@ public class MainActivity extends AppCompatActivity {
         repo.ensureStats(uid);
         repo.normalizeXpLevel(uid, v -> {}, e -> Log.w(TAG, "normalizeXpLevel: " + e.getMessage()));
 
-        // Listener del documento del usuario (saldo y equipamiento)
         repo.listenUser(uid, (snap, err) -> {
             if (err != null) {
                 Log.w(TAG, "listenUser error: " + err.getMessage());
@@ -128,28 +122,58 @@ public class MainActivity extends AppCompatActivity {
             }
             if (snap != null && snap.exists()) {
                 Long saldo = snap.getLong("usu_saldo");
-                if (saldo != null && tvCoins != null) {
-                    tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
-                }
-                // mantenemos el cache para rollover aunque no lo mostremos
+                if (saldo != null && tvCoins != null) tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
+
                 Double kmSemana = getNestedDouble(snap, "usu_stats.km_semana");
                 if (kmSemana != null) kmSemanaCache = kmSemana;
+
+                // -------- notificaciones: level up --------
+                int newLevel = (snap.getLong("usu_nivel") == null) ? 1 : snap.getLong("usu_nivel").intValue();
+                int lastLevel = userPrefs().getInt(KEY_LAST_LEVEL, 1);
+                if (newLevel > lastLevel) {
+                    NotificationHelper.showLevelUp(this, newLevel);
+                    userPrefs().edit().putInt(KEY_LAST_LEVEL, newLevel).apply();
+                } else if (!userPrefs().contains(KEY_LAST_LEVEL)) {
+                    userPrefs().edit().putInt(KEY_LAST_LEVEL, newLevel).apply();
+                }
+
+                // -------- notificaciones: metas disponibles --------
+                long metaDaily  = (snap.getLong("usu_stats.meta_diaria_pasos")  == null) ? 8000L  : snap.getLong("usu_stats.meta_diaria_pasos");
+                long metaWeekly = (snap.getLong("usu_stats.meta_semanal_pasos") == null) ? 56000L : snap.getLong("usu_stats.meta_semanal_pasos");
+
+                long stepsToday = userPrefs().getLong(KEY_PASOS_HOY, 0L);
+                if (stepsToday >= metaDaily) {
+                    String todayKey = todayYMD();
+                    if (!userPrefs().getBoolean(KEY_NOTIF_DAILY_PREFIX + todayKey, false)) {
+                        NotificationHelper.showGoalClaimAvailable(this, "diaria");
+                        userPrefs().edit().putBoolean(KEY_NOTIF_DAILY_PREFIX + todayKey, true).apply();
+                    }
+                }
+
+                long weekStart = (snap.getLong("usu_stats.week_started_at") == null) ? System.currentTimeMillis() : snap.getLong("usu_stats.week_started_at");
+                boolean windowReady = System.currentTimeMillis() - weekStart >= 7L * 24L * 60L * 60L * 1000L;
+
+                long stepsWeek = (long) Math.max(0, Math.round((kmSemanaCache * 1000.0) / 0.78)); // ≈ pasos
+                if (windowReady && stepsWeek >= metaWeekly) {
+                    String cycle = weeklyCycleString(weekStart);
+                    if (!userPrefs().getBoolean(KEY_NOTIF_WEEKLY_PREFIX + cycle, false)) {
+                        NotificationHelper.showGoalClaimAvailable(this, "semanal");
+                        userPrefs().edit().putBoolean(KEY_NOTIF_WEEKLY_PREFIX + cycle, true).apply();
+                    }
+                }
 
                 renderAvatarFromUserSnapshot(snap);
             }
         });
 
-        // Mostrar pasos guardados (persistidos en prefs por el steps callback)
         long pasosGuardados = userPrefs().getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosGuardados));
 
-        // StepsManager: SOLO local -> UI
-        stepsManager = new StepsManager(this, /*db=*/null, /*userId=*/0L, (stepsToday, kmHoy) -> {
+        stepsManager = new StepsManager(this, null, 0L, (stepsToday, kmHoy) -> {
             userPrefs().edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
             tvKmTotalBig.setText(String.valueOf(stepsToday));
         });
 
-        // --- Clicks de la fila superior ---
         findViewById(R.id.btnTopGoals).setOnClickListener(v -> openGoalsFragment());
         findViewById(R.id.btnTopStats).setOnClickListener(v -> openStatsFragment());
         findViewById(R.id.btnTopProfile).setOnClickListener(v -> openProfileSheet());
@@ -157,13 +181,10 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopOptions).setOnClickListener(v ->
                 Toast.makeText(this, "Opciones (próximamente)", Toast.LENGTH_SHORT).show());
 
-        // --- Bottom bar: abrir ShopActivity ---
         findViewById(R.id.btnShop).setOnClickListener(v ->
                 startActivity(new Intent(MainActivity.this, ShopActivity.class)));
 
-        getSupportFragmentManager().setFragmentResultListener(
-                "coins_changed", this, (requestKey, bundle) -> { /* no-op */ }
-        );
+        getSupportFragmentManager().setFragmentResultListener("coins_changed", this, (requestKey, bundle) -> {});
 
         requestRuntimePermissions();
 
@@ -173,24 +194,19 @@ public class MainActivity extends AppCompatActivity {
         updateBigStepsFromStorage();
     }
 
-    @Override
-    protected void onResume() {
+    @Override protected void onResume() {
         super.onResume();
-        if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) {
-            maybeRunRollover();
-        }
+        if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) maybeRunRollover();
         updateBigStepsFromStorage();
         secureStartSteps();
     }
 
-    @Override
-    protected void onPause() {
+    @Override protected void onPause() {
         super.onPause();
         secureStopSteps();
     }
 
-    @Override
-    protected void onDestroy() {
+    @Override protected void onDestroy() {
         super.onDestroy();
         secureStopSteps();
     }
@@ -206,54 +222,37 @@ public class MainActivity extends AppCompatActivity {
                     .putLong(KEY_PASOS_HOY, 0L)
                     .putInt(KEY_DIAS_CONTADOS, 0)
                     .putBoolean(KEY_FIRST_LOGIN_DONE, true)
+                    .putInt(KEY_LAST_LEVEL, 1)
                     .apply();
-
             global.edit().putString(KEY_LAST_UID, uid).apply();
         } else {
             SharedPreferences up = userPrefs();
-            if (!up.contains(KEY_ULTIMO_DIA)) {
-                up.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
-            }
-            if (!up.contains(KEY_FIRST_LOGIN_DONE)) {
-                up.edit().putBoolean(KEY_FIRST_LOGIN_DONE, true).apply();
-            }
+            if (!up.contains(KEY_ULTIMO_DIA)) up.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
+            if (!up.contains(KEY_FIRST_LOGIN_DONE)) up.edit().putBoolean(KEY_FIRST_LOGIN_DONE, true).apply();
         }
     }
 
-    // ==== Navegación ====
     private void openGoalsFragment() {
-        getSupportFragmentManager()
-                .beginTransaction()
-                .setCustomAnimations(
-                        android.R.anim.fade_in,  android.R.anim.fade_out,
-                        android.R.anim.fade_in,  android.R.anim.fade_out)
+        getSupportFragmentManager().beginTransaction()
+                .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
+                        android.R.anim.fade_in, android.R.anim.fade_out)
                 .replace(R.id.root, new GoalsFragment())
                 .addToBackStack("goals")
                 .commit();
     }
-
     private void openStatsFragment() {
-        getSupportFragmentManager()
-                .beginTransaction()
-                .setCustomAnimations(
-                        android.R.anim.fade_in,  android.R.anim.fade_out,
-                        android.R.anim.fade_in,  android.R.anim.fade_out)
+        getSupportFragmentManager().beginTransaction()
+                .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
+                        android.R.anim.fade_in, android.R.anim.fade_out)
                 .replace(R.id.root, new StatsFragment())
                 .addToBackStack("stats")
                 .commit();
     }
-
-    private void openProfileSheet() {
-        ProfileFragment sheet = new ProfileFragment();
-        sheet.show(getSupportFragmentManager(), "profile_sheet");
-    }
-
+    private void openProfileSheet() { new ProfileFragment().show(getSupportFragmentManager(), "profile_sheet"); }
     private void openNotificationsFragment() {
-        getSupportFragmentManager()
-                .beginTransaction()
-                .setCustomAnimations(
-                        android.R.anim.fade_in,  android.R.anim.fade_out,
-                        android.R.anim.fade_in,  android.R.anim.fade_out)
+        getSupportFragmentManager().beginTransaction()
+                .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
+                        android.R.anim.fade_in, android.R.anim.fade_out)
                 .replace(R.id.root, new NotificationFragment())
                 .addToBackStack("notifications")
                 .commit();
@@ -262,53 +261,29 @@ public class MainActivity extends AppCompatActivity {
     // ====== Permisos ======
     private void requestRuntimePermissions() {
         ArrayList<String> req = new ArrayList<>();
-
         if (Build.VERSION.SDK_INT >= 29 &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
-                        != PackageManager.PERMISSION_GRANTED) {
-            req.add(Manifest.permission.ACTIVITY_RECOGNITION);
-        }
+                        != PackageManager.PERMISSION_GRANTED) req.add(Manifest.permission.ACTIVITY_RECOGNITION);
         if (Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                        != PackageManager.PERMISSION_GRANTED) {
-            req.add(Manifest.permission.POST_NOTIFICATIONS);
-        }
+                        != PackageManager.PERMISSION_GRANTED) req.add(Manifest.permission.POST_NOTIFICATIONS);
 
-        if (!req.isEmpty()) {
-            permsLauncher.launch(req.toArray(new String[0]));
-        } else {
-            secureStartSteps();
-        }
+        if (!req.isEmpty()) permsLauncher.launch(req.toArray(new String[0]));
+        else secureStartSteps();
     }
-
     private boolean ensureARGranted() {
         return !(Build.VERSION.SDK_INT >= 29) ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
                         == PackageManager.PERMISSION_GRANTED;
     }
-
-    private void secureStartSteps() {
-        if (stepsManager == null) return;
-        if (!ensureARGranted()) return;
-        try {
-            stepsManager.start();
-        } catch (SecurityException se) {
-            Log.w(TAG, "SecurityException al iniciar StepsManager: " + se.getMessage());
-        }
-    }
-
-    private void secureStopSteps() {
-        if (stepsManager == null) return;
-        try {
-            stepsManager.stop();
-        } catch (SecurityException se) {
-            Log.w(TAG, "SecurityException al detener StepsManager: " + se.getMessage());
-        }
-    }
+    private void secureStartSteps() { if (stepsManager != null && ensureARGranted()) try { stepsManager.start(); } catch (SecurityException ignored) {} }
+    private void secureStopSteps()  { if (stepsManager != null) try { stepsManager.stop(); } catch (SecurityException ignored) {} }
 
     // ==== Rollover y UI ====
-    private String todayString() {
-        return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+    private String todayString() { return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date()); }
+    private String todayYMD()    { return new SimpleDateFormat("yyyyMMdd",  Locale.getDefault()).format(new Date()); }
+    private String weeklyCycleString(long weekStartMs) {
+        return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date(weekStartMs));
     }
 
     private void maybeRunRollover() {
@@ -318,34 +293,25 @@ public class MainActivity extends AppCompatActivity {
         String last = sp.getString(KEY_ULTIMO_DIA, "");
         String today = todayString();
 
-        if (today.equals(last)) return; // mismo día
+        if (today.equals(last)) return;
 
         long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
         double kmAgregar = pasosHoy * STEP_TO_KM;
 
-        // Sumar tanto a semana como a total (transacción que mantiene el invariante)
         repo.addKmDelta(uid, kmAgregar, v -> {}, e -> Log.w(TAG, "addKmDelta error: " + e.getMessage()));
-
-        // actualizar cache para la próxima corrida (aunque no se muestra)
-        double nuevoSem = Math.max(0.0, kmSemanaCache + kmAgregar);
 
         repo.updateMayorPasosDiaIfGreater(uid, pasosHoy);
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
         if (diasContados >= 7) {
-            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error: " + e.getMessage()));
+            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error"));
             kmSemanaCache = 0.0;
             diasContados = 0;
         } else {
-            kmSemanaCache = nuevoSem;
+            kmSemanaCache = Math.max(0.0, kmSemanaCache + kmAgregar);
         }
 
-        sp.edit()
-                .putString(KEY_ULTIMO_DIA, today)
-                .putLong(KEY_PASOS_HOY, 0L)
-                .putInt(KEY_DIAS_CONTADOS, diasContados)
-                .apply();
-
+        sp.edit().putString(KEY_ULTIMO_DIA, today).putLong(KEY_PASOS_HOY, 0L).putInt(KEY_DIAS_CONTADOS, diasContados).apply();
         tvKmTotalBig.setText(String.valueOf(0));
     }
 
@@ -354,8 +320,7 @@ public class MainActivity extends AppCompatActivity {
         tvKmTotalBig.setText(String.valueOf(pasosHoy));
     }
 
-    @Nullable
-    private Double getNestedDouble(DocumentSnapshot snap, String dottedPath) {
+    @Nullable private Double getNestedDouble(DocumentSnapshot snap, String dottedPath) {
         Object val = snap.get(dottedPath);
         if (val instanceof Number) return ((Number) val).doubleValue();
         return null;
@@ -382,20 +347,14 @@ public class MainActivity extends AppCompatActivity {
                 .addOnFailureListener(e -> Log.w(TAG, "my_cosmetics get() error: " + e.getMessage()));
     }
 
-    private static class LayerRequest {
-        final String type;
-        final String asset;
-        LayerRequest(String t, String a) { type = t; asset = a; }
-    }
+    private static class LayerRequest { final String type; final String asset;
+        LayerRequest(String t, String a) { type = t; asset = a; } }
 
-    @Nullable
-    private LayerRequest fromCache(QuerySnapshot qs, @Nullable String cosId) {
+    @Nullable private LayerRequest fromCache(QuerySnapshot qs, @Nullable String cosId) {
         if (cosId == null) return null;
-        DocumentSnapshot d = qs.getDocuments().stream()
-                .filter(doc -> cosId.equals(doc.getId()))
-                .findFirst().orElse(null);
+        DocumentSnapshot d = null;
+        for (DocumentSnapshot doc : qs) { if (cosId.equals(doc.getId())) { d = doc; break; } }
         if (d == null) return null;
-
         Object at = d.get("myc_cache.cos_assetType");
         Object av = d.get("myc_cache.cos_asset");
         String type  = (at instanceof String && !((String) at).isEmpty()) ? (String) at : null;
@@ -419,24 +378,19 @@ public class MainActivity extends AppCompatActivity {
                                             @Nullable String cabezaId) {
 
         LayerRequest[] reqs = new LayerRequest[] {
-                fromCache(qs, pielId),      // base
-                fromCache(qs, zapasId),     // zapatillas
-                fromCache(qs, pantalonId),  // pantalón
-                fromCache(qs, remeraId),    // remera
-                fromCache(qs, cabezaId)     // cabeza
+                fromCache(qs, pielId),
+                fromCache(qs, zapasId),
+                fromCache(qs, pantalonId),
+                fromCache(qs, remeraId),
+                fromCache(qs, cabezaId)
         };
 
         boolean anyRemote = false;
-        for (LayerRequest r : reqs) {
-            if (isRemote(r)) { anyRemote = true; break; }
-        }
+        for (LayerRequest r : reqs) if (isRemote(r)) { anyRemote = true; break; }
 
         if (!anyRemote) {
             ArrayList<Drawable> layers = new ArrayList<>();
-            for (LayerRequest r : reqs) {
-                if (r == null || r.asset == null) continue;
-                addLayerIfExists(layers, r.asset);
-            }
+            for (LayerRequest r : reqs) if (r != null && r.asset != null) addLayerIfExists(layers, r.asset);
             if (layers.isEmpty()) {
                 int def = getResIdByName("piel_startskin");
                 if (def != 0) ivAvatar.setImageResource(def);
@@ -471,10 +425,7 @@ public class MainActivity extends AppCompatActivity {
             final int idx = i;
             final LayerRequest r = reqs[i];
 
-            if (r == null || r.asset == null) {
-                done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
-                continue;
-            }
+            if (r == null || r.asset == null) { done[0]++; maybeFinishOrdered(slots, done[0], total, cb); continue; }
 
             if (!isRemote(r)) {
                 int resId = getResIdByName(r.asset);
@@ -482,26 +433,17 @@ public class MainActivity extends AppCompatActivity {
                 slots[idx] = dr;
                 done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
             } else {
-                String url;
-                if (r.asset.startsWith("http://") || r.asset.startsWith("https://")) {
-                    url = r.asset;
-                } else {
-                    String cloudName = getString(R.string.cloudinary_cloud_name);
-                    boolean hasExt = r.asset.contains(".");
-                    url = "https://res.cloudinary.com/" + cloudName + "/image/upload/" + r.asset + (hasExt ? "" : ".png");
-                }
+                String url = (r.asset.startsWith("http://") || r.asset.startsWith("https://"))
+                        ? r.asset
+                        : "https://res.cloudinary.com/" + getString(R.string.cloudinary_cloud_name) + "/image/upload/" + r.asset + (r.asset.contains(".") ? "" : ".png");
 
                 Glide.with(this).asDrawable().load(url).into(new CustomTarget<Drawable>() {
                     @Override public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
                         slots[idx] = resource;
                         done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
                     }
-                    @Override public void onLoadCleared(@Nullable Drawable placeholder) {
-                        done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
-                    }
-                    @Override public void onLoadFailed(@Nullable Drawable errorDrawable) {
-                        done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
-                    }
+                    @Override public void onLoadCleared(@Nullable Drawable placeholder) { done[0]++; maybeFinishOrdered(slots, done[0], total, cb); }
+                    @Override public void onLoadFailed(@Nullable Drawable errorDrawable) { done[0]++; maybeFinishOrdered(slots, done[0], total, cb); }
                 });
             }
         }
@@ -515,11 +457,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Nullable
-    private String asString(Object o) {
-        return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null;
-    }
-
+    @Nullable private String asString(Object o) { return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null; }
     private void addLayerIfExists(ArrayList<Drawable> layers, @Nullable String assetName) {
         if (assetName == null) return;
         int resId = getResIdByName(assetName);
@@ -527,8 +465,5 @@ public class MainActivity extends AppCompatActivity {
         Drawable dr = ContextCompat.getDrawable(this, resId);
         if (dr != null) layers.add(dr);
     }
-
-    private int getResIdByName(String name) {
-        return getResources().getIdentifier(name, "drawable", getPackageName());
-    }
+    private int getResIdByName(String name) { return getResources().getIdentifier(name, "drawable", getPackageName()); }
 }

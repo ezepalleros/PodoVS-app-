@@ -101,6 +101,13 @@ public class GoalsFragment extends DialogFragment {
             double kmSemana = getNestedDouble(snap, "usu_stats.km_semana", 0.0);
             long stepsWeek  = Math.max(0L, Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
 
+            // ------- ventana semanal -------
+            long weekStart = getNestedLong(snap, "usu_stats.week_started_at", System.currentTimeMillis());
+            long msElapsed = System.currentTimeMillis() - weekStart;
+            long msNeeded  = 7L * 24L * 60L * 60L * 1000L;
+            long msLeft    = Math.max(0, msNeeded - msElapsed);
+            boolean weekWindowReady = msLeft == 0;
+
             // ---- Diario ----
             boolean claimedD = alreadyClaimedToday();
             boolean reachedD = stepsToday >= metaDaily;
@@ -135,11 +142,20 @@ public class GoalsFragment extends DialogFragment {
             pbWeekly.setProgress((int)Math.min(stepsWeek, Integer.MAX_VALUE));
             tvWeeklyCoins.setText(String.format(Locale.getDefault(), "Recompensa posible: %,d", metaWeekly));
 
-            btnWeeklyClaim.setEnabled(reachedW && !claimedW);
-            btnWeeklyClaim.setAlpha(btnWeeklyClaim.isEnabled() ? 1f : 0.5f);
+            boolean canClaimWeekly = weekWindowReady && reachedW && !claimedW;
+
+            btnWeeklyClaim.setEnabled(canClaimWeekly);
+            btnWeeklyClaim.setAlpha(canClaimWeekly ? 1f : 0.5f);
+
             if (claimedW) {
                 tvWeeklyState.setText("Completada");
                 tvWeeklyState.setTextColor(Color.parseColor("#7BE48F"));
+            } else if (!weekWindowReady) {
+                long hrs = msLeft / (60L*60L*1000L);
+                long days = hrs / 24;
+                long remH = hrs % 24;
+                tvWeeklyState.setText("Se habilita en " + days + "d " + remH + "h");
+                tvWeeklyState.setTextColor(Color.parseColor("#A6A9B1"));
             } else if (reachedW) {
                 tvWeeklyState.setText("Listo para reclamar");
                 tvWeeklyState.setTextColor(Color.parseColor("#6FE6B7"));
@@ -163,13 +179,9 @@ public class GoalsFragment extends DialogFragment {
                 Toast.makeText(requireContext(), "Todavía no alcanzaste la meta diaria.", Toast.LENGTH_SHORT).show();
                 return;
             }
-            long coins = metaDaily; // recompensa basada en la meta vigente
+            long coins = metaDaily;
             repo.claimDaily(uid, coins,
-                    v -> {
-                        markClaimedToday(coins);
-                        getParentFragmentManager().setFragmentResult("coins_changed", new Bundle());
-                        if (isAdded()) { Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show(); bindData(); }
-                    },
+                    v -> { markClaimedToday(coins); getParentFragmentManager().setFragmentResult("coins_changed", new Bundle()); if (isAdded()) { Toast.makeText(requireContext(), "¡+" + coins + " monedas!", Toast.LENGTH_LONG).show(); bindData(); } },
                     e -> { if (isAdded()) Toast.makeText(requireContext(), "No se pudo reclamar: " + e.getMessage(), Toast.LENGTH_LONG).show(); });
         }, e -> { if (isAdded()) Toast.makeText(requireContext(), "Error verificando meta diaria.", Toast.LENGTH_SHORT).show(); });
     }
@@ -181,10 +193,19 @@ public class GoalsFragment extends DialogFragment {
             long metaWeekly = getNestedLong(snap, "usu_stats.meta_semanal_pasos", 56000L);
             double kmSemana = getNestedDouble(snap, "usu_stats.km_semana", 0.0);
             long stepsWeek  = Math.max(0L, Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
+
+            long weekStart = getNestedLong(snap, "usu_stats.week_started_at", System.currentTimeMillis());
+            boolean windowReady = System.currentTimeMillis() - weekStart >= 7L*24L*60L*60L*1000L;
+
+            if (!windowReady) {
+                Toast.makeText(requireContext(), "Aún no pasaron 7 días desde el inicio de la semana.", Toast.LENGTH_SHORT).show();
+                return;
+            }
             if (stepsWeek < metaWeekly) {
                 Toast.makeText(requireContext(), "Todavía no alcanzaste la meta semanal.", Toast.LENGTH_SHORT).show();
                 return;
             }
+
             long coins = metaWeekly;
             repo.claimWeekly(uid, coins,
                     v -> {
@@ -205,14 +226,9 @@ public class GoalsFragment extends DialogFragment {
     }
     private boolean alreadyClaimedToday() { return ymd().equals(prefs().getString("last_daily_claim_"+uid, "")); }
     private boolean alreadyClaimedWeek()  { return yearWeek().equals(prefs().getString("last_weekly_claim_"+uid, "")); }
-    private void markClaimedToday(long amount) {
-        prefs().edit().putString("last_daily_claim_"+uid, ymd()).putLong("last_daily_amount_"+uid, amount).apply();
-    }
-    private void markClaimedWeek(long amount) {
-        prefs().edit().putString("last_weekly_claim_"+uid, yearWeek()).putLong("last_weekly_amount_"+uid, amount).apply();
-    }
+    private void markClaimedToday(long amount) { prefs().edit().putString("last_daily_claim_"+uid, ymd()).putLong("last_daily_amount_"+uid, amount).apply(); }
+    private void markClaimedWeek(long amount)  { prefs().edit().putString("last_weekly_claim_"+uid, yearWeek()).putLong("last_weekly_amount_"+uid, amount).apply(); }
 
-    // --------- Pasos locales ---------
     static class StepsPrefs {
         private static final String SP_STEPS = "steps_prefs";
         private static final String KEY_TOTAL_PREFIX = "total_";
@@ -222,7 +238,6 @@ public class GoalsFragment extends DialogFragment {
         }
     }
 
-    // --------- Helpers ---------
     private int safeInt(long value) { return (int)Math.min(value, Integer.MAX_VALUE); }
     private long getNestedLong(DocumentSnapshot s, String path, long def) {
         Object v = s.get(path);

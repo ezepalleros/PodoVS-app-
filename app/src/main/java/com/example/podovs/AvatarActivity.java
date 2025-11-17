@@ -92,7 +92,7 @@ public class AvatarActivity extends AppCompatActivity {
         btnCatPantalon.setOnClickListener(v -> { currentTipo = "pantalon"; refreshGrid(); });
         btnCatZapas.setOnClickListener(v -> { currentTipo = "zapatillas"; refreshGrid(); });
 
-        btnConfirm.setOnClickListener(v -> saveSelection());  // <-- ahora existe
+        btnConfirm.setOnClickListener(v -> saveSelection());
         btnCancel.setOnClickListener(v -> finish());
     }
 
@@ -115,9 +115,10 @@ public class AvatarActivity extends AppCompatActivity {
                 String id     = d.getId();
                 Map<String, Object> cache = (Map<String, Object>) d.get("myc_cache");
                 String tipo   = cache == null ? null : asString(cache.get("cos_tipo"));
-                String asset  = cache == null ? null : asString(cache.get("cos_asset")); // nombre drawable o URL
+                String asset  = cache == null ? null : asString(cache.get("cos_asset"));      // drawable o url/slug
+                String aType  = cache == null ? null : asString(cache.get("cos_assetType"));  // "cloudinary" o null
                 boolean eq    = Boolean.TRUE.equals(d.getBoolean("myc_equipped"));
-                all.add(new Cosmetic(id, tipo, asset, eq));
+                all.add(new Cosmetic(id, tipo, asset, aType, eq));
             }
 
             refreshGrid();
@@ -130,11 +131,16 @@ public class AvatarActivity extends AppCompatActivity {
         if (!"piel".equals(currentTipo)) filtered.add(Cosmetic.none(currentTipo));
         for (Cosmetic c : all) if (currentTipo.equalsIgnoreCase(c.tipo)) filtered.add(c);
 
-        rv.setAdapter(new CosAdapter(filtered, currentTipo, selectedByTipo.get(currentTipo), clicked -> {
-            selectedByTipo.put(currentTipo, clicked.id); // puede ser null
-            renderPreview();
-            rv.getAdapter().notifyDataSetChanged();
-        }));
+        rv.setAdapter(new CosAdapter(
+                filtered,
+                currentTipo,
+                selectedByTipo.get(currentTipo),
+                clicked -> {
+                    selectedByTipo.put(currentTipo, clicked.id); // puede ser null
+                    renderPreview();
+                    rv.getAdapter().notifyDataSetChanged();
+                }
+        ));
     }
 
     private void renderPreview() {
@@ -183,7 +189,7 @@ public class AvatarActivity extends AppCompatActivity {
         ivPreview.setImageBitmap(scaled);
     }
 
-    // ======= SAVE (volvió el método que faltaba) =======
+    // ======= SAVE =======
     private void saveSelection() {
         WriteBatch batch = db.batch();
 
@@ -223,7 +229,7 @@ public class AvatarActivity extends AppCompatActivity {
         for (Cosmetic c : all) {
             if (cosId.equals(c.id)) {
                 int[] off = OFFSETS.getOrDefault(c.id, new int[]{0,0});
-                out.add(new LayerReq(c.asset, off[0], off[1]));
+                out.add(new LayerReq(c.asset, c.assetType, off[0], off[1]));
                 break;
             }
         }
@@ -239,7 +245,7 @@ public class AvatarActivity extends AppCompatActivity {
             final int idx = i;
             final LayerReq r = reqs.get(i);
 
-            loadDrawable(r.asset, new CustomTarget<Drawable>() {
+            loadDrawable(r.asset, r.assetType, new CustomTarget<Drawable>() {
                 @Override public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
                     slots[idx] = new Layer(resource, r.offX, r.offY);
                     if (++count[0] == total) {
@@ -255,25 +261,47 @@ public class AvatarActivity extends AppCompatActivity {
                         cb.onReady(out);
                     }
                 }
+                @Override public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                    if (++count[0] == total) {
+                        List<Layer> out = new ArrayList<>();
+                        for (Layer l : slots) if (l != null) out.add(l);
+                        cb.onReady(out);
+                    }
+                }
             });
         }
     }
 
-    private void loadDrawable(@Nullable String asset, @NonNull CustomTarget<Drawable> target) {
+    private void loadDrawable(@Nullable String asset, @Nullable String assetType,
+                              @NonNull CustomTarget<Drawable> target) {
         if (asset == null) { target.onResourceReady(new EmptyDrawable(), null); return; }
-        if (asset.startsWith("http")) {
-            Glide.with(this).asDrawable().load(asset).into(target);
-        } else {
-            int resId = getResources().getIdentifier(asset, "drawable", getPackageName());
-            Drawable d = (resId != 0) ? ContextCompat.getDrawable(this, resId) : null;
-            target.onResourceReady(d != null ? d : new EmptyDrawable(), null);
+
+        // Cloudinary slug → URL completa
+        if ("cloudinary".equalsIgnoreCase(assetType)) {
+            String cloud = getString(R.string.cloudinary_cloud_name); // asegúrate de tener este string
+            String url = asset.startsWith("http")
+                    ? asset
+                    : "https://res.cloudinary.com/" + cloud + "/image/upload/" + asset + (asset.contains(".") ? "" : ".png");
+            Glide.with(this).asDrawable().load(url).into(target);
+            return;
         }
+
+        // URL directa
+        if (asset.startsWith("http://") || asset.startsWith("https://")) {
+            Glide.with(this).asDrawable().load(asset).into(target);
+            return;
+        }
+
+        // Drawable local por nombre
+        int resId = getResources().getIdentifier(asset, "drawable", getPackageName());
+        Drawable d = (resId != 0) ? ContextCompat.getDrawable(this, resId) : null;
+        target.onResourceReady(d != null ? d : new EmptyDrawable(), null);
     }
 
     private interface OnLayersReady { void onReady(List<Layer> layers); }
     private static class LayerReq {
-        final String asset; final int offX; final int offY;
-        LayerReq(String a, int x, int y) { asset=a; offX=x; offY=y; }
+        final String asset; final String assetType; final int offX; final int offY;
+        LayerReq(String a, String t, int x, int y) { asset=a; assetType=t; offX=x; offY=y; }
     }
     private static class Layer {
         final Drawable drawable; final int offX; final int offY;
@@ -302,15 +330,16 @@ public class AvatarActivity extends AppCompatActivity {
     private static class Cosmetic {
         final String id;
         final String tipo;
-        final String asset;   // nombre de drawable o URL (Cloudinary)
+        final String asset;      // nombre de drawable o URL/slug
+        final String assetType;  // "cloudinary" o null
         final boolean equipped;
-        Cosmetic(String id, String tipo, String asset, boolean eq) {
-            this.id=id; this.tipo=tipo; this.asset=asset; this.equipped=eq;
+        Cosmetic(String id, String tipo, String asset, String assetType, boolean eq) {
+            this.id=id; this.tipo=tipo; this.asset=asset; this.assetType=assetType; this.equipped=eq;
         }
-        static Cosmetic none(String tipo) { return new Cosmetic(null, tipo, null, false); }
+        static Cosmetic none(String tipo) { return new Cosmetic(null, tipo, null, null, false); }
     }
 
-    private static class CosAdapter extends RecyclerView.Adapter<CosAdapter.Holder> {
+    private class CosAdapter extends RecyclerView.Adapter<CosAdapter.Holder> {
         interface OnPick { void onPick(Cosmetic c); }
 
         final List<Cosmetic> data;
@@ -336,14 +365,22 @@ public class AvatarActivity extends AppCompatActivity {
         @Override public void onBindViewHolder(@NonNull Holder h, int i) {
             Context ctx = h.itemView.getContext();
             Cosmetic c = data.get(i);
+
             if (c.id == null) {
                 h.iv.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-            } else if (c.asset != null && c.asset.startsWith("http")) {
+            } else if ("cloudinary".equalsIgnoreCase(c.assetType)) {
+                String cloud = getString(R.string.cloudinary_cloud_name);
+                String url = (c.asset != null && (c.asset.startsWith("http://") || c.asset.startsWith("https://")))
+                        ? c.asset
+                        : "https://res.cloudinary.com/" + cloud + "/image/upload/" + c.asset + (c.asset != null && c.asset.contains(".") ? "" : ".png");
+                Glide.with(ctx).load(url).into(h.iv);
+            } else if (c.asset != null && (c.asset.startsWith("http://") || c.asset.startsWith("https://"))) {
                 Glide.with(ctx).load(c.asset).into(h.iv);
             } else {
                 int res = ctx.getResources().getIdentifier(c.asset, "drawable", ctx.getPackageName());
                 if (res != 0) h.iv.setImageResource(res); else h.iv.setImageDrawable(null);
             }
+
             boolean sel = (selectedId == null && c.id == null) ||
                     (selectedId != null && selectedId.equals(c.id));
             h.iv.setBackgroundColor(sel ? 0x332196F3 : 0x00000000);
@@ -352,11 +389,11 @@ public class AvatarActivity extends AppCompatActivity {
 
         @Override public int getItemCount() { return data.size(); }
 
-        static int dp(Context c, int d) {
+        int dp(Context c, int d) {
             return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, d,
                     c.getResources().getDisplayMetrics()));
         }
-        static class Holder extends RecyclerView.ViewHolder {
+        class Holder extends RecyclerView.ViewHolder {
             ImageView iv;
             Holder(@NonNull View itemView) { super(itemView); iv = (ImageView) itemView; }
         }

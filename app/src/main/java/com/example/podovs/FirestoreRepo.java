@@ -28,7 +28,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import androidx.annotation.IntDef;
 
 public class FirestoreRepo {
 
@@ -37,7 +36,6 @@ public class FirestoreRepo {
 
     private static final int XP_PER_LEVEL = 100;
 
-    // -------- Starter pack --------
     private static final String[] STARTER_IDS = {
             "cos_id_1","cos_id_2","cos_id_3","cos_id_4","cos_id_5","cos_id_6","cos_id_7",
             "cos_id_13","cos_id_14","cos_id_15"
@@ -49,25 +47,20 @@ public class FirestoreRepo {
         auth = FirebaseAuth.getInstance();
     }
 
-    // ---------- Paths ----------
     private DocumentReference userDoc(@NonNull String uid) { return db.collection("users").document(uid); }
     private DocumentReference cosmeticDoc(@NonNull String cosId) { return db.collection("cosmetics").document(cosId); }
-    private DocumentReference inventoryDoc(@NonNull String uid, @NonNull String cosId) {
-        return userDoc(uid).collection("my_cosmetics").document(cosId);
-    }
+    private DocumentReference inventoryDoc(@NonNull String uid, @NonNull String cosId) { return userDoc(uid).collection("my_cosmetics").document(cosId); }
 
     // ---------- Auth ----------
     public void signIn(@NonNull String email, @NonNull String password,
                        @NonNull OnSuccessListener<AuthResult> ok,
                        @NonNull OnFailureListener err) {
-        auth.signInWithEmailAndPassword(email, password)
-                .addOnSuccessListener(ok).addOnFailureListener(err);
+        auth.signInWithEmailAndPassword(email, password).addOnSuccessListener(ok).addOnFailureListener(err);
     }
     public void createUser(@NonNull String email, @NonNull String password,
                            @NonNull OnSuccessListener<AuthResult> ok,
                            @NonNull OnFailureListener err) {
-        auth.createUserWithEmailAndPassword(email, password)
-                .addOnSuccessListener(ok).addOnFailureListener(err);
+        auth.createUserWithEmailAndPassword(email, password).addOnSuccessListener(ok).addOnFailureListener(err);
     }
     public FirebaseUser currentUser() { return auth.getCurrentUser(); }
 
@@ -88,7 +81,6 @@ public class FirestoreRepo {
         data.put("usu_saldo", 0L);
         data.put("usu_nivel", 1);
         data.put("usu_difi", dif.toLowerCase());
-        // NUEVOS CAMPOS
         data.put("usu_rol", "user");
         data.put("usu_suspendido", false);
 
@@ -97,16 +89,16 @@ public class FirestoreRepo {
         stats.put("km_total",  0.0);
         stats.put("xp", 0L);
         stats.put("objetos_comprados", 0L);
-        // placeholders (se recalculan abajo en transacción por dif+nivel)
         stats.put("meta_diaria_pasos",  1000L);
         stats.put("meta_semanal_pasos", 10000L);
-
         stats.put("carreras_ganadas",      0L);
         stats.put("eventos_participados",  0L);
         stats.put("mejor_posicion",        0L);
         stats.put("mayor_pasos_dia",       0L);
         stats.put("metas_diarias_total",   0L);
         stats.put("metas_semana_total",    0L);
+        // NUEVO: marca de inicio de ciclo semanal
+        stats.put("week_started_at", System.currentTimeMillis());
 
         data.put("usu_stats", stats);
 
@@ -128,7 +120,7 @@ public class FirestoreRepo {
         DocumentReference ref = userDoc(uid);
         ref.get().addOnSuccessListener(snap -> {
             Map<String, Object> up = new HashMap<>();
-            // eliminar legados
+            // limpiar legados
             up.put("usu_stats.km_hoy", FieldValue.delete());
             up.put("usu_stats.metas_diarias_cumplidas", FieldValue.delete());
             up.put("usu_stats.metas_semanales_cumplidas", FieldValue.delete());
@@ -145,31 +137,27 @@ public class FirestoreRepo {
             ensureMissingLong  (snap, up, "usu_stats.mayor_pasos_dia",      0L);
             ensureMissingLong  (snap, up, "usu_stats.metas_diarias_total",  0L);
             ensureMissingLong  (snap, up, "usu_stats.metas_semana_total",   0L);
+            // NUEVO: si falta inicio de semana, poner ahora
+            if (!(snap.get("usu_stats.week_started_at") instanceof Number)) {
+                up.put("usu_stats.week_started_at", System.currentTimeMillis());
+            }
             if (!up.isEmpty()) ref.update(up);
 
-            // Fuerza el invariante si venía roto
             db.runTransaction((Transaction.Function<Void>) tr -> {
                 DocumentSnapshot s = tr.get(ref);
                 double sem = (s.getDouble("usu_stats.km_semana") == null) ? 0.0 : s.getDouble("usu_stats.km_semana");
                 double tot = (s.getDouble("usu_stats.km_total")  == null) ? 0.0 : s.getDouble("usu_stats.km_total");
-                if (sem > tot) {
-                    tr.update(ref, "usu_stats.km_total", sem);
-                }
+                if (sem > tot) tr.update(ref, "usu_stats.km_total", sem);
                 return null;
             });
         });
     }
 
-    // ---------- Ranking ----------
     public Query rankingHoy() {
-        return db.collection("users")
-                .orderBy("usu_stats.mayor_pasos_dia", Query.Direction.DESCENDING)
-                .limit(50);
+        return db.collection("users").orderBy("usu_stats.mayor_pasos_dia", Query.Direction.DESCENDING).limit(50);
     }
     public Query rankingSemana() {
-        return db.collection("users")
-                .orderBy("usu_stats.km_semana", Query.Direction.DESCENDING)
-                .limit(50);
+        return db.collection("users").orderBy("usu_stats.km_semana", Query.Direction.DESCENDING).limit(50);
     }
 
     // ---------- Saldo ----------
@@ -186,7 +174,7 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---------- Distancias (mantener km_total >= km_semana) ----------
+    // ---------- Distancias ----------
     public void setKmSemana(@NonNull String uid, double km,
                             @NonNull OnSuccessListener<Void> ok,
                             @NonNull OnFailureListener err) {
@@ -195,7 +183,7 @@ public class FirestoreRepo {
             DocumentSnapshot s = tr.get(ref);
             double tot = (s.getDouble("usu_stats.km_total") == null) ? 0.0 : s.getDouble("usu_stats.km_total");
             double nuevoSem = Math.max(0.0, km);
-            double nuevoTot = Math.max(tot, nuevoSem); // nunca menor que semana
+            double nuevoTot = Math.max(tot, nuevoSem);
             Map<String, Object> up = new HashMap<>();
             up.put("usu_stats.km_semana", nuevoSem);
             up.put("usu_stats.km_total", nuevoTot);
@@ -212,7 +200,7 @@ public class FirestoreRepo {
             DocumentSnapshot s = tr.get(ref);
             double sem = (s.getDouble("usu_stats.km_semana") == null) ? 0.0 : s.getDouble("usu_stats.km_semana");
             double nuevoTot = Math.max(0.0, km);
-            if (nuevoTot < sem) nuevoTot = sem; // forzar invariante
+            if (nuevoTot < sem) nuevoTot = sem;
             tr.update(ref, "usu_stats.km_total", nuevoTot);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
@@ -229,7 +217,7 @@ public class FirestoreRepo {
             double curTot = (s.getDouble("usu_stats.km_total")  == null) ? 0.0 : s.getDouble("usu_stats.km_total");
             double nuevoSem = Math.max(0.0, curSem + kmDelta);
             double nuevoTot = Math.max(0.0, curTot + kmDelta);
-            if (nuevoTot < nuevoSem) nuevoTot = nuevoSem; // seguridad extra
+            if (nuevoTot < nuevoSem) nuevoTot = nuevoSem;
             Map<String, Object> up = new HashMap<>();
             up.put("usu_stats.km_semana", nuevoSem);
             up.put("usu_stats.km_total",  nuevoTot);
@@ -256,22 +244,15 @@ public class FirestoreRepo {
         if (d.contains("medio")  || d.contains("normal")) return 0.2;
         return 0.1;
     }
-
     private long dailyFor(int nivel, String dif) {
-        int n = Math.max(1, nivel);
-        double mult = difMultiplier(dif);
-        long base = 1000L;
+        int n = Math.max(1, nivel); double mult = difMultiplier(dif); long base = 1000L;
         return Math.round(base * (1.0 + mult * Math.sqrt(n - 1)));
     }
-
     private long weeklyFor(int nivel, String dif) {
-        int n = Math.max(1, nivel);
-        double mult = difMultiplier(dif);
-        long base = 10000L;
+        int n = Math.max(1, nivel); double mult = difMultiplier(dif); long base = 10000L;
         return Math.round(base * (1.0 + mult * Math.sqrt(n - 1)));
     }
 
-    /** Sincroniza metas usando **nivel actual** + dificultad dada. */
     public void syncGoalsWithDifficulty(@NonNull String uid,
                                         @NonNull String dificultad,
                                         @NonNull OnSuccessListener<Void> ok,
@@ -282,7 +263,6 @@ public class FirestoreRepo {
             int nivel = (s.getLong("usu_nivel") == null) ? 1 : s.getLong("usu_nivel").intValue();
             long diaria  = dailyFor(nivel, dificultad);
             long semanal = weeklyFor(nivel, dificultad);
-
             Map<String,Object> m = new HashMap<>();
             m.put("usu_difi", dificultad.toLowerCase());
             m.put("usu_stats.meta_diaria_pasos",  diaria);
@@ -292,14 +272,12 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    /** Cambia dificultad y actualiza metas en un solo paso (nivel-consistente). */
     public void setDifficulty(@NonNull String uid, @NonNull String nuevaDifi,
                               @NonNull OnSuccessListener<Void> ok,
                               @NonNull OnFailureListener err) {
         syncGoalsWithDifficulty(uid, nuevaDifi, ok, err);
     }
 
-    /** Recalcula metas para el usuario actual leyendo su nivel y dificultad guardada. */
     public void forceRecalcGoals(@NonNull String uid,
                                  @NonNull OnSuccessListener<Void> ok,
                                  @NonNull OnFailureListener err) {
@@ -318,7 +296,7 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---------- XP / Nivel (100 XP por nivel SIEMPRE) ----------
+    // ---------- XP / Nivel ----------
     public void normalizeXpLevel(@NonNull String uid,
                                  @NonNull OnSuccessListener<Void> ok,
                                  @NonNull OnFailureListener err) {
@@ -337,8 +315,6 @@ public class FirestoreRepo {
             Map<String,Object> up = new HashMap<>();
             if (nuevoXp != xp)    up.put("usu_stats.xp", nuevoXp);
             if (nuevoNivel != nivel) up.put("usu_nivel", nuevoNivel);
-
-            // ajuste de metas cuando cambió el nivel
             if (leveleo) {
                 up.put("usu_stats.meta_diaria_pasos",  dailyFor(nuevoNivel, dif));
                 up.put("usu_stats.meta_semanal_pasos", weeklyFor(nuevoNivel, dif));
@@ -349,7 +325,6 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    /** Suma XP y si levelea, recalcula metas con fórmula (base × mult × nivel). */
     public void addXpAndMaybeLevelUp(@NonNull String uid, int deltaXp,
                                      @NonNull OnSuccessListener<Integer> ok,
                                      @NonNull OnFailureListener err) {
@@ -369,7 +344,6 @@ public class FirestoreRepo {
             Map<String, Object> up = new HashMap<>();
             up.put("usu_nivel", nuevoNivel);
             up.put("usu_stats.xp", nuevoXp);
-
             if (leveleo) {
                 up.put("usu_stats.meta_diaria_pasos",  dailyFor(nuevoNivel, dif));
                 up.put("usu_stats.meta_semanal_pasos", weeklyFor(nuevoNivel, dif));
@@ -439,7 +413,37 @@ public class FirestoreRepo {
 
     public void claimWeekly(@NonNull String uid, long coins, @NonNull OnSuccessListener<Void> ok,
                             @NonNull OnFailureListener err) {
-        grantReward(uid, coins, 90, false, true, ok, err);
+        // Reinicia ciclo semanal al reclamar
+        db.runTransaction((Transaction.Function<Void>) tr -> {
+            DocumentReference ref = userDoc(uid);
+            DocumentSnapshot s = tr.get(ref);
+
+            long saldo = (s.getLong("usu_saldo") == null) ? 0L : s.getLong("usu_saldo");
+            long nuevoSaldo = saldo + coins;
+
+            long xp = (s.getLong("usu_stats.xp") == null) ? 0L : s.getLong("usu_stats.xp");
+            long nuevoXp = Math.max(0, xp + 90); // XP semanal
+            int nivel = (s.getLong("usu_nivel") == null) ? 1 : s.getLong("usu_nivel").intValue();
+            String dif = (s.getString("usu_difi") == null) ? "facil" : s.getString("usu_difi");
+
+            int nuevoNivel = nivel;
+            boolean leveleo = false;
+            while (nuevoXp >= XP_PER_LEVEL) { nuevoXp -= XP_PER_LEVEL; nuevoNivel++; leveleo = true; }
+
+            Map<String,Object> up = new HashMap<>();
+            up.put("usu_saldo", nuevoSaldo);
+            up.put("usu_stats.xp", nuevoXp);
+            up.put("usu_nivel", nuevoNivel);
+            up.put("usu_stats.metas_semana_total", FieldValue.increment(1));
+            up.put("usu_stats.km_semana", 0.0);
+            up.put("usu_stats.week_started_at", System.currentTimeMillis());
+            if (leveleo) {
+                up.put("usu_stats.meta_diaria_pasos",  dailyFor(nuevoNivel, dif));
+                up.put("usu_stats.meta_semanal_pasos", weeklyFor(nuevoNivel, dif));
+            }
+            tr.update(ref, up);
+            return null;
+        }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
     // ===== Helpers =====
@@ -468,11 +472,9 @@ public class FirestoreRepo {
 
             if (missing.isEmpty()) {
                 WriteBatch batch = db.batch();
-                batch.set(
-                        inventoryDoc(uid, DEFAULT_SKIN_ID),
+                batch.set(inventoryDoc(uid, DEFAULT_SKIN_ID),
                         new HashMap<String, Object>() {{ put("myc_equipped", true); }},
-                        SetOptions.merge()
-                );
+                        SetOptions.merge());
                 batch.update(userDoc(uid), "usu_equipped.usu_piel", DEFAULT_SKIN_ID);
                 batch.commit().addOnSuccessListener(ok).addOnFailureListener(err);
                 return;
@@ -529,8 +531,7 @@ public class FirestoreRepo {
             cache.put("cos_tipo", s.getString("cos_tipo"));
             data.put("myc_cache", cache);
 
-            inventoryDoc(uid, cosId).set(data)
-                    .addOnSuccessListener(ok).addOnFailureListener(err);
+            inventoryDoc(uid, cosId).set(data).addOnSuccessListener(ok).addOnFailureListener(err);
         }).addOnFailureListener(err);
     }
 
@@ -552,35 +553,29 @@ public class FirestoreRepo {
         return userDoc(uid).addSnapshotListener(listener);
     }
 
-
-
     // ---- Constantes de cofres ----
-    public static final int CHEST_T1 = 1; // 10k => premia items de 20k
-    public static final int CHEST_T2 = 2; // 25k => 50k
-    public static final int CHEST_T3 = 3; // 50k => 100k
+    public static final int CHEST_T1 = 1;
+    public static final int CHEST_T2 = 2;
+    public static final int CHEST_T3 = 3;
 
     @IntDef({CHEST_T1, CHEST_T2, CHEST_T3})
     public @interface ChestTier {}
 
-    public com.google.android.gms.tasks.Task<List<DocumentSnapshot>> fetchShopPool() {
-        // cos_tienda = true AND cos_activo = true
+    public Task<List<DocumentSnapshot>> fetchShopPool() {
         return db.collection("cosmetics")
                 .whereEqualTo("cos_tienda", true)
                 .whereEqualTo("cos_activo", true)
-                .get()
-                .continueWith(t -> t.getResult().getDocuments());
+                .get().continueWith(t -> t.getResult().getDocuments());
     }
 
-    public com.google.android.gms.tasks.Task<List<DocumentSnapshot>> fetchEventCosmetics() {
+    public Task<List<DocumentSnapshot>> fetchEventCosmetics() {
         return db.collection("cosmetics")
                 .whereEqualTo("cos_evento", true)
                 .whereEqualTo("cos_activo", true)
-                .get()
-                .continueWith(t -> t.getResult().getDocuments());
+                .get().continueWith(t -> t.getResult().getDocuments());
     }
 
-    /** Devuelve IDs de inventario del usuario (para marcar “ya lo tenés”). */
-    public com.google.android.gms.tasks.Task<List<String>> fetchAllInventoryIds(@NonNull String uid) {
+    public Task<List<String>> fetchAllInventoryIds(@NonNull String uid) {
         return userDoc(uid).collection("my_cosmetics").get()
                 .continueWith(t -> {
                     List<String> out = new ArrayList<>();
@@ -589,28 +584,25 @@ public class FirestoreRepo {
                 });
     }
 
-    /** Compra directa (botón Comprar). Verifica saldo y duplicados. */
+    /** Compra transaccional garantizando alta en my_cosmetics. */
     public void buyCosmetic(@NonNull String uid, @NonNull String cosId, long price,
                             @NonNull OnSuccessListener<Void> ok, @NonNull OnFailureListener err) {
         db.runTransaction((Transaction.Function<Void>) tr -> {
             DocumentSnapshot u = tr.get(userDoc(uid));
 
-            // suspendido no compra
             Boolean susp = u.getBoolean("usu_suspendido");
             if (susp != null && susp) throw new IllegalStateException("Usuario suspendido.");
 
             long saldo = (u.getLong("usu_saldo") == null) ? 0L : u.getLong("usu_saldo");
             if (saldo < price) throw new IllegalStateException("Saldo insuficiente.");
 
-            // ya lo tiene?
             DocumentSnapshot inv = tr.get(inventoryDoc(uid, cosId));
-            if (inv.exists()) throw new IllegalStateException("Ya posees este objeto.");
+            if (inv.exists()) throw new IllegalStateException("Ya lo tenés.");
 
             DocumentSnapshot cos = tr.get(cosmeticDoc(cosId));
             if (!Boolean.TRUE.equals(cos.getBoolean("cos_activo")))
                 throw new IllegalStateException("No disponible.");
 
-            // debitar + agregar inventario (con cache)
             tr.update(userDoc(uid), "usu_saldo", saldo - price,
                     "usu_stats.objetos_comprados", FieldValue.increment(1));
 
@@ -625,12 +617,11 @@ public class FirestoreRepo {
             sub.put("myc_obtenido", FieldValue.serverTimestamp());
             sub.put("myc_equipped", false);
             tr.set(inventoryDoc(uid, cosId), sub);
-
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---- Cofres ----
+    // ---- Cofres (sin cambios) ----
     public static class ChestResult {
         public final boolean duplicated;
         public final String cosmeticId;
@@ -645,15 +636,11 @@ public class FirestoreRepo {
                           @NonNull OnSuccessListener<ChestResult> ok,
                           @NonNull OnFailureListener err) {
 
-        long chestCost;
-        long prizePrice; // precio de los ítems que pueden tocar
-        long refund;
-
+        long chestCost, prizePrice, refund;
         if (tier == CHEST_T1) { chestCost = 10_000; prizePrice = 20_000; refund = 5_000; }
         else if (tier == CHEST_T2) { chestCost = 25_000; prizePrice = 50_000; refund = 12_000; }
         else { chestCost = 50_000; prizePrice = 100_000; refund = 25_000; }
 
-        // Traigo candidatos por precio
         db.collection("cosmetics")
                 .whereEqualTo("cos_precio", prizePrice)
                 .whereEqualTo("cos_activo", true)
@@ -662,7 +649,6 @@ public class FirestoreRepo {
                     List<DocumentSnapshot> all = qs.getDocuments();
                     if (all.isEmpty()) { err.onFailure(new IllegalStateException("Sin premios disponibles.")); return; }
 
-                    // elijo random en cliente
                     DocumentSnapshot chosen = all.get(new Random().nextInt(all.size()));
                     String cosId = chosen.getId();
                     String cosName = chosen.getString("cos_nombre");
@@ -678,13 +664,11 @@ public class FirestoreRepo {
 
                         DocumentSnapshot inv = tr.get(inventoryDoc(uid, cosId));
                         if (inv.exists()) {
-                            // Duplicado -> cobro cofre y devuelvo mitad
                             long nuevo = (saldo - chestCost) + refund;
                             if (nuevo < 0) nuevo = 0;
                             tr.update(userDoc(uid), "usu_saldo", nuevo);
                             return new ChestResult(true, cosId, cosName == null ? "-" : cosName, refund);
                         } else {
-                            // Restar costo, dar item
                             tr.update(userDoc(uid),
                                     "usu_saldo", saldo - chestCost,
                                     "usu_stats.objetos_comprados", FieldValue.increment(1));
@@ -707,5 +691,4 @@ public class FirestoreRepo {
                 })
                 .addOnFailureListener(err);
     }
-
 }

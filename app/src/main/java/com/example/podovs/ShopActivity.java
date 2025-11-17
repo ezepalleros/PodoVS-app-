@@ -30,6 +30,7 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
+import androidx.core.content.ContextCompat;
 
 import com.bumptech.glide.Glide;
 import com.google.android.gms.tasks.Task;
@@ -40,7 +41,6 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - Rotación REAL cada 3 horas (estable dentro del mismo tramo)
  * - Selección determinística por usuario (seed = slot^uidHash)
  * - Cuenta regresiva visible junto a "Ofertas"
- * - Fondos animados "lluvia" por sección
+ * - Fondos animados "lluvia" por sección (dispersa)
  */
 public class ShopActivity extends AppCompatActivity {
 
@@ -86,11 +86,11 @@ public class ShopActivity extends AppCompatActivity {
     private static final int POOL_GOLD    = 100000;
 
     // ======= Paleta directa (sin R.color) =======
-    private static final int COL_BG_CARD     = Color.parseColor("#F3F4F6"); // gris 050
-    private static final int COL_TEXT_DARK   = Color.parseColor("#111827"); // gris 900
-    private static final int COL_TEXT_MEDIUM = Color.parseColor("#4B5563"); // gris 700
-    private static final int COL_BTN_LILAC   = Color.parseColor("#8B5CF6"); // lilac 500
-    private static final int COL_BTN_DISABLED= Color.parseColor("#9CA3AF"); // gris 400
+    private static final int COL_BG_CARD     = Color.parseColor("#F3F4F6");
+    private static final int COL_TEXT_DARK   = Color.parseColor("#111827");
+    private static final int COL_TEXT_MEDIUM = Color.parseColor("#4B5563");
+    private static final int COL_BTN_LILAC   = Color.parseColor("#8B5CF6");
+    private static final int COL_BTN_DISABLED= Color.parseColor("#9CA3AF");
 
     // ======= Rotación 3h (ticker) =======
     private long lastSeed = -1L;
@@ -98,10 +98,10 @@ public class ShopActivity extends AppCompatActivity {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             updateCountdown();
-            long s = computedSeed();        // seed actual (3h ^ uid)
+            long s = computedSeed();
             if (s != lastSeed) {
                 lastSeed = s;
-                loadDailyShop();            // cambia automáticamente sin salir de la activity
+                loadDailyShop();
             }
             handler.postDelayed(this, 1000);
         }
@@ -131,12 +131,11 @@ public class ShopActivity extends AppCompatActivity {
         tvRotationTitle = findViewById(R.id.tvRotationTitle);
         tvRotationTimer = findViewById(R.id.tvRotationTimer);
 
-        // Secciones para el fondo animado
+        // Secciones para el fondo animado (más disperso)
         sectionRotation = findViewById(R.id.sectionRotation);
         sectionChests   = findViewById(R.id.sectionChests);
         sectionEvents   = findViewById(R.id.sectionEvents);
 
-        // Lluvia (verde, amarillo, azul)
         attachRain(sectionRotation, R.drawable.icon_bag,   0xFFE6F7EC);
         attachRain(sectionChests,   R.drawable.icon_chest, 0xFFFFF4CC);
         attachRain(sectionEvents,   R.drawable.icon_event, 0xFFE5F0FF);
@@ -187,14 +186,12 @@ public class ShopActivity extends AppCompatActivity {
 
     private long rotationSeed() { return System.currentTimeMillis() / SLOT_MS; }
 
-    /** Semilla por usuario (local, distinta para cada uid) */
     private long computedSeed() {
         long slot = rotationSeed();
         long userHash = uid == null ? 0 : uid.hashCode();
         return slot ^ userHash;
     }
 
-    /** Actualiza el contador hh:mm:ss y el texto de cabecera */
     private void updateCountdown() {
         long now = System.currentTimeMillis();
         long next = ((now / SLOT_MS) + 1) * SLOT_MS;
@@ -215,18 +212,16 @@ public class ShopActivity extends AppCompatActivity {
 
     // ==================== Ofertas (3) ====================
     private void loadDailyShop() {
-        // 1) Intentar leer ids persistidos para el seed actual
         SharedPreferences p = getSharedPreferences(PREF_SHOP + "_" + uid, MODE_PRIVATE);
         long storedSeed = p.getLong(KEY_SEED, -1);
         String csv = p.getString(KEY_IDS, null);
 
         if (storedSeed == lastSeed && !TextUtils.isEmpty(csv)) {
             String[] ids = csv.split(",");
-            fetchOffersByIds(ids); // lectura directa por id (sin whereIn)
+            fetchOffersByIds(ids);
             return;
         }
 
-        // 2) Generar determinísticamente la selección (sin ORDER BY en Firestore para evitar índice)
         db.collection("cosmetics")
                 .whereEqualTo("cos_tienda", true)
                 .whereEqualTo("cos_activo", true)
@@ -235,7 +230,6 @@ public class ShopActivity extends AppCompatActivity {
                     List<DocumentSnapshot> all = new ArrayList<>(qs.getDocuments());
                     if (all.isEmpty()) return;
 
-                    // Orden estable local (por id) para que el seed sea reproducible
                     Collections.sort(all, Comparator.comparing(DocumentSnapshot::getId));
 
                     SecureRandom rnd = new SecureRandom(longToBytes(lastSeed));
@@ -247,7 +241,6 @@ public class ShopActivity extends AppCompatActivity {
                         if (picked.add(idx)) chosenIds.add(all.get(idx).getId());
                     }
 
-                    // Persistir para NO cambiar hasta el próximo tramo
                     p.edit()
                             .putLong(KEY_SEED, lastSeed)
                             .putString(KEY_IDS, TextUtils.join(",", chosenIds))
@@ -255,29 +248,20 @@ public class ShopActivity extends AppCompatActivity {
 
                     fetchOffersByIds(chosenIds.toArray(new String[0]));
                 })
-                .addOnFailureListener(e -> {
-                    // Si falla la consulta, limpiar fila para no dejarla vacía permanentemente
-                    rowDailyShop.removeAllViews();
-                });
+                .addOnFailureListener(e -> rowDailyShop.removeAllViews());
     }
 
-    /** Carga EXACTAMENTE los docs indicados, manteniendo el orden, y asegura 3 cards. */
     private void fetchOffersByIds(String[] ids) {
         rowDailyShop.removeAllViews();
 
-        // limpiar ids vacíos y limitar a 3
         ArrayList<String> clean = new ArrayList<>();
-        for (String s : ids == null ? new String[0] : ids) {
-            if (!TextUtils.isEmpty(s)) clean.add(s.trim());
-        }
+        for (String s : ids == null ? new String[0] : ids) if (!TextUtils.isEmpty(s)) clean.add(s.trim());
         if (clean.isEmpty()) return;
         if (clean.size() > 3) clean = new ArrayList<>(clean.subList(0, 3));
 
-        // Lee por id individual y respeta el orden original
         List<Task<DocumentSnapshot>> reads = new ArrayList<>();
-        for (String id : clean) {
-            reads.add(db.collection("cosmetics").document(id).get());
-        }
+        for (String id : clean) reads.add(db.collection("cosmetics").document(id).get());
+
         final ArrayList<String> finalClean = new ArrayList<>(clean);
         Tasks.whenAllSuccess(reads).addOnSuccessListener(list -> {
             for (int i = 0; i < finalClean.size(); i++) {
@@ -286,7 +270,6 @@ public class ShopActivity extends AppCompatActivity {
                     rowDailyShop.addView(makeCosmeticCard(d, true));
                 }
             }
-            // si por algún motivo no llegaron 3, rellena con cualquiera activa de tienda
             if (rowDailyShop.getChildCount() < 3) {
                 final int faltanInicial = 3 - rowDailyShop.getChildCount();
                 AtomicInteger faltan = new AtomicInteger(faltanInicial);
@@ -296,14 +279,13 @@ public class ShopActivity extends AppCompatActivity {
                         .get()
                         .addOnSuccessListener(qs -> {
                             for (DocumentSnapshot d : qs) {
-                                if (finalClean.contains(d.getId())) continue; // evitar duplicados
+                                if (finalClean.contains(d.getId())) continue;
                                 rowDailyShop.addView(makeCosmeticCard(d, true));
                                 if (faltan.decrementAndGet() <= 0) break;
                             }
                         });
             }
         }).addOnFailureListener(e -> {
-            // Si falla, limpia prefs para reintentar en el próximo tick
             SharedPreferences p = getSharedPreferences(PREF_SHOP + "_" + uid, MODE_PRIVATE);
             p.edit().clear().apply();
         });
@@ -376,13 +358,11 @@ public class ShopActivity extends AppCompatActivity {
     }
 
     private void openChest(int chestPrice, int prizePrice) {
-        // 1) Verificar saldo y descontar PRIMERO
         repo.getUser(uid, user -> {
             long saldo = user.getLong("usu_saldo") == null ? 0L : user.getLong("usu_saldo");
             if (saldo < chestPrice) { Toast.makeText(this, "Saldo insuficiente.", Toast.LENGTH_SHORT).show(); return; }
 
             repo.addSaldo(uid, -chestPrice, v1 -> {
-                // 2) Elegir premio del pool
                 db.collection("cosmetics")
                         .whereEqualTo("cos_activo", true)
                         .whereEqualTo("cos_precio", prizePrice)
@@ -394,11 +374,9 @@ public class ShopActivity extends AppCompatActivity {
                                 Toast.makeText(this, "Sin premios disponibles.", Toast.LENGTH_SHORT).show();
                                 return;
                             }
-                            SecureRandom rnd = new SecureRandom();
-                            DocumentSnapshot prize = pool.get(rnd.nextInt(pool.size()));
+                            DocumentSnapshot prize = pool.get(new SecureRandom().nextInt(pool.size()));
                             String cosId = prize.getId();
 
-                            // 3) ¿Repetido?
                             db.collection("users").document(uid)
                                     .collection("my_cosmetics").document(cosId)
                                     .get().addOnSuccessListener(s -> {
@@ -412,7 +390,6 @@ public class ShopActivity extends AppCompatActivity {
                                                     },
                                                     e2 -> Toast.makeText(this, "Error devolución.", Toast.LENGTH_SHORT).show());
                                         } else {
-                                            // 4) Entregar
                                             repo.addToInventory(uid, cosId, false,
                                                     v2 -> {
                                                         showNewItemDialog(true, prize);
@@ -609,35 +586,19 @@ public class ShopActivity extends AppCompatActivity {
     }
 
     private void tryBuy(String cosId, String tipo, long price) {
-        // Gratis permitido
         if (price < 0) { Toast.makeText(this, "Precio inválido.", Toast.LENGTH_SHORT).show(); return; }
 
-        db.collection("users").document(uid)
-                .collection("my_cosmetics").document(cosId)
-                .get().addOnSuccessListener(s -> {
-                    if (s.exists()) { Toast.makeText(this, "Ya lo tenés.", Toast.LENGTH_SHORT).show(); return; }
-
-                    if (price == 0L) {
-                        repo.addToInventory(uid, cosId, false,
-                                vv -> Toast.makeText(this, "Reclamado ✔", Toast.LENGTH_SHORT).show(),
-                                e -> Toast.makeText(this, "Error al reclamar.", Toast.LENGTH_LONG).show());
-                        return;
-                    }
-
-                    repo.getUser(uid, u -> {
-                        long saldo = u.getLong("usu_saldo") == null ? 0L : u.getLong("usu_saldo");
-                        if (saldo < price) { Toast.makeText(this, "Saldo insuficiente.", Toast.LENGTH_SHORT).show(); return; }
-
-                        repo.addSaldo(uid, -price, v -> {
-                            repo.addToInventory(uid, cosId, false,
-                                    vv -> Toast.makeText(this, "Comprado ✔", Toast.LENGTH_SHORT).show(),
-                                    e -> {
-                                        repo.addSaldo(uid, price, vvv -> {}, ee -> {});
-                                        Toast.makeText(this, "Error compra.", Toast.LENGTH_LONG).show();
-                                    });
-                        }, e -> Toast.makeText(this, "Error saldo.", Toast.LENGTH_SHORT).show());
-                    }, e -> Toast.makeText(this, "Error usuario.", Toast.LENGTH_SHORT).show());
-                });
+        // >>> CAMBIO CLAVE: compra transaccional que SIEMPRE crea my_cosmetics <<<
+        repo.buyCosmetic(uid, cosId, price,
+                v -> {
+                    // feedback visual cargando el doc para mostrarlo en el diálogo
+                    db.collection("cosmetics").document(cosId).get()
+                            .addOnSuccessListener(doc -> {
+                                if (doc != null && doc.exists()) showNewItemDialog(true, doc);
+                                Toast.makeText(this, "Comprado ✔", Toast.LENGTH_SHORT).show();
+                            });
+                },
+                e -> Toast.makeText(this, e.getMessage() == null ? "Error compra." : e.getMessage(), Toast.LENGTH_LONG).show());
     }
 
     // ==== BottomSheet de resultado de cofre usando fragment_newitem.xml ====
@@ -653,7 +614,7 @@ public class ShopActivity extends AppCompatActivity {
         if (tvTitle != null) tvTitle.setText(isNew ? "¡Nuevo cosmético!" : "Cosmético repetido");
         if (tvSubtitle != null) tvSubtitle.setText(prizeDoc.getString("cos_nombre"));
         if (btn != null) {
-            btn.setText(isNew ? "Reclamar" : "Qué mal");
+            btn.setText("OK");
             btn.setOnClickListener(v -> dialog.dismiss());
         }
 
@@ -679,16 +640,16 @@ public class ShopActivity extends AppCompatActivity {
     }
     private int dp(int v) { return (int) (v * getResources().getDisplayMetrics().density); }
 
-    // ------------------ Fondo animado: "lluvia" ------------------
+    // ------------------ Fondo animado: "lluvia" (mejor dispersión) ------------------
     private void attachRain(ViewGroup container, int iconRes, int pastelBackground) {
         if (container == null) return;
         container.setBackgroundColor(pastelBackground);
 
         RainView rain = new RainView(this);
         rain.setIcon(iconRes);
-        rain.setConfig(18, dp(18), dp(32), 4000);
+        // menos tamaño, más elementos, más caída
+        rain.setConfig(28, dp(14), dp(26), 4500);
 
-        // Insertar como PRIMER hijo (detrás del contenido)
         container.addView(rain, 0,
                 new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
@@ -697,15 +658,16 @@ public class ShopActivity extends AppCompatActivity {
     public static class RainView extends View {
 
         private static class Drop {
-            float x, y, size, speed;
+            float x, y, size, vy, vx, alpha;
         }
 
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private Bitmap bmp;
         private Drop[] drops = new Drop[0];
         private long lastTime = -1L;
-        private float minSizePx = 24, maxSizePx = 40;
-        private long travelMs = 4000;
+        private float minSizePx = 18, maxSizePx = 28;
+        private long travelMs = 4500;
+        private int bucketCount = 12; // distribuye X por buckets para evitar amontonamiento
 
         public RainView(android.content.Context ctx) { super(ctx); init(); }
         public RainView(android.content.Context ctx, @Nullable AttributeSet a) { super(ctx, a); init(); }
@@ -715,9 +677,9 @@ public class ShopActivity extends AppCompatActivity {
             setWillNotDraw(false);
             setClickable(false);
             setFocusable(false);
-            p.setAlpha(70);
+            p.setAlpha(90);
             ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
-            va.setDuration(1000);
+            va.setDuration(900);
             va.setRepeatCount(ValueAnimator.INFINITE);
             va.addUpdateListener(animation -> invalidate());
             va.start();
@@ -738,15 +700,36 @@ public class ShopActivity extends AppCompatActivity {
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
-            for (int i = 0; i < drops.length; i++) drops[i] = randomDrop(w, h, true);
+            // distribuir por buckets en X
+            bucketCount = (int) Math.max(8, Math.min(20, w / dp(24)));
+            int perBucket = Math.max(1, drops.length / bucketCount);
+            int i = 0;
+            for (int b = 0; b < bucketCount; b++) {
+                float bx0 = (w * b) / (float) bucketCount;
+                float bx1 = (w * (b + 1)) / (float) bucketCount;
+                for (int k = 0; k < perBucket && i < drops.length; k++, i++) {
+                    drops[i] = randomDrop(w, h, bx0, bx1, true);
+                }
+            }
+            while (i < drops.length) { // completar si faltaron
+                drops[i++] = randomDrop(w, h, 0, w, true);
+            }
         }
 
-        private Drop randomDrop(int w, int h, boolean anywhereY) {
+        private float dp(float v) { return v * getResources().getDisplayMetrics().density; }
+
+        private Drop randomDrop(int w, int h, float x0, float x1, boolean anywhereY) {
             Drop d = new Drop();
             d.size = (float) (minSizePx + Math.random() * (maxSizePx - minSizePx));
-            d.x = (float) (Math.random() * Math.max(1, (w - d.size)));
+            float jitter = (float) (Math.random() * (x1 - x0 - d.size));
+            d.x = Math.max(0, x0 + jitter);
             d.y = anywhereY ? (float) (Math.random() * h) : -d.size;
-            d.speed = (float) (h + d.size) / travelMs;
+
+            // velocidad vertical proporcional a altura
+            d.vy = (float) ((h + d.size) / (travelMs * (0.7 + Math.random() * 0.6))); // variación 0.7x-1.3x
+            // viento: leve drift a la derecha
+            d.vx = (float) (dp(10) / travelMs * (0.5 + Math.random())); // 0.5x-1.5x
+            d.alpha = (float) (0.35 + Math.random() * 0.55); // 35%-90% opacidad
             return d;
         }
 
@@ -765,8 +748,18 @@ public class ShopActivity extends AppCompatActivity {
 
             for (int i = 0; i < drops.length; i++) {
                 Drop d = drops[i];
-                d.y += d.speed * dt;
-                if (d.y - d.size > h) drops[i] = d = randomDrop(w, h, false);
+                d.y += d.vy * dt;
+                d.x += d.vx * dt;
+
+                if (d.y - d.size > h || d.x - d.size > w) {
+                    // re-spawn arriba con nuevo bucket aleatorio
+                    int b = (int) (Math.random() * bucketCount);
+                    float bx0 = (w * b) / (float) bucketCount;
+                    float bx1 = (w * (b + 1)) / (float) bucketCount;
+                    drops[i] = d = randomDrop(w, h, bx0, bx1, false);
+                }
+
+                p.setAlpha((int) (255 * d.alpha));
                 RectF dst = new RectF(d.x, d.y, d.x + d.size, d.y + d.size);
                 c.drawBitmap(bmp, null, dst, p);
             }
