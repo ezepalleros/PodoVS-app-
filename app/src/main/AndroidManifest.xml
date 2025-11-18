@@ -62,5 +62,10 @@
             android:name=".ShopActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".VersusActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
     </application>
 </manifest>

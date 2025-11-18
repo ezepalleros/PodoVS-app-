@@ -176,9 +176,19 @@ public class ShopActivity extends AppCompatActivity {
         ImageButton btnEvt  = findViewById(R.id.btnEvents);
         ImageButton btnLb   = findViewById(R.id.btnLeaderboards);
 
-        btnHome.setOnClickListener(v -> { startActivity(new Intent(this, MainActivity.class)); finish(); });
-        btnShop.setOnClickListener(v -> Toast.makeText(this, "Estás en la tienda", Toast.LENGTH_SHORT).show());
-        btnVs.setOnClickListener(v -> safeNavigate("com.example.podovs.VersusActivity", "VS próximamente"));
+        btnHome.setOnClickListener(v -> {
+            startActivity(new Intent(this, MainActivity.class));
+            finish();
+        });
+        btnShop.setOnClickListener(v ->
+                Toast.makeText(this, "Estás en la tienda", Toast.LENGTH_SHORT).show());
+
+        // AHORA: ir directo a VersusActivity
+        btnVs.setOnClickListener(v -> {
+            startActivity(new Intent(this, VersusActivity.class));
+            finish();
+        });
+
         btnEvt.setOnClickListener(v -> safeNavigate("com.example.podovs.EventsActivity", "Eventos próximamente"));
         btnLb.setOnClickListener(v -> safeNavigate("com.example.podovs.LeaderboardsActivity", "Tablas próximamente"));
     }

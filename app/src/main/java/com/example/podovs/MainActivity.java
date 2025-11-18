@@ -13,6 +13,7 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ImageButton;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -180,8 +181,37 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
         findViewById(R.id.btnTopOptions).setOnClickListener(v -> openOptionsFragment());
 
+        // Botón (tarjeta) de tienda en el main
         findViewById(R.id.btnShop).setOnClickListener(v ->
                 startActivity(new Intent(MainActivity.this, ShopActivity.class)));
+
+        // === Bottom bar: navegación a Versus y otros ===
+        ImageButton btnHome = findViewById(R.id.btnHome);
+        ImageButton btnVs   = findViewById(R.id.btnVs);
+        ImageButton btnEvt  = findViewById(R.id.btnEvents);
+        ImageButton btnLb   = findViewById(R.id.btnLeaderboards);
+
+        if (btnHome != null) {
+            btnHome.setOnClickListener(v ->
+                    Toast.makeText(this, "Ya estás en inicio", Toast.LENGTH_SHORT).show());
+        }
+
+        if (btnVs != null) {
+            btnVs.setOnClickListener(v -> {
+                startActivity(new Intent(this, VersusActivity.class));
+                finish();
+            });
+        }
+
+        if (btnEvt != null) {
+            btnEvt.setOnClickListener(v ->
+                    Toast.makeText(this, "Eventos próximamente", Toast.LENGTH_SHORT).show());
+        }
+
+        if (btnLb != null) {
+            btnLb.setOnClickListener(v ->
+                    Toast.makeText(this, "Rankings próximamente", Toast.LENGTH_SHORT).show());
+        }
 
         getSupportFragmentManager().setFragmentResultListener("coins_changed", this, (requestKey, bundle) -> {});
 

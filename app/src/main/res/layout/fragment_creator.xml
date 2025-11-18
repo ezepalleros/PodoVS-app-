@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Crear sala VS"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:paddingBottom="12dp" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/swPublic"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Sala pública"
+        android:paddingBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tvModeLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Modo"
+        android:paddingTop="8dp" />
+
+    <RadioGroup
+        android:id="@+id/rgMode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingBottom="8dp">
+
+        <RadioButton
+            android:id="@+id/rbRace"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Carrera" />
+
+        <RadioButton
+            android:id="@+id/rbMarathon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Maratón"
+            android:layout_marginStart="16dp" />
+    </RadioGroup>
+
+    <TextView
+        android:id="@+id/tvCodeLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Código para unirse (solo privadas)"
+        android:paddingTop="8dp" />
+
+    <TextView
+        android:id="@+id/tvCodeValue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:paddingTop="4dp"
+        android:paddingBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnCreateRoomConfirm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Crear sala" />
+
+</LinearLayout>

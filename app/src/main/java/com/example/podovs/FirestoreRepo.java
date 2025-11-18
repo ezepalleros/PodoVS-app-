@@ -2,6 +2,7 @@ package com.example.podovs;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -18,14 +19,15 @@ import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.SetOptions;
 import com.google.firebase.firestore.Transaction;
 import com.google.firebase.firestore.WriteBatch;
-import com.google.firebase.firestore.SetOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 
@@ -48,21 +50,37 @@ public class FirestoreRepo {
         auth = FirebaseAuth.getInstance();
     }
 
-    private DocumentReference userDoc(@NonNull String uid) { return db.collection("users").document(uid); }
-    private DocumentReference cosmeticDoc(@NonNull String cosId) { return db.collection("cosmetics").document(cosId); }
-    private DocumentReference inventoryDoc(@NonNull String uid, @NonNull String cosId) { return userDoc(uid).collection("my_cosmetics").document(cosId); }
+    private DocumentReference userDoc(@NonNull String uid) {
+        return db.collection("users").document(uid);
+    }
+    private DocumentReference cosmeticDoc(@NonNull String cosId) {
+        return db.collection("cosmetics").document(cosId);
+    }
+    private DocumentReference inventoryDoc(@NonNull String uid, @NonNull String cosId) {
+        return userDoc(uid).collection("my_cosmetics").document(cosId);
+    }
+
+    // rooms / versus
+    private CollectionReference roomsCol() { return db.collection("rooms"); }
+    private CollectionReference versusCol() { return db.collection("versus"); }
 
     // ---------- Auth ----------
     public void signIn(@NonNull String email, @NonNull String password,
                        @NonNull OnSuccessListener<AuthResult> ok,
                        @NonNull OnFailureListener err) {
-        auth.signInWithEmailAndPassword(email, password).addOnSuccessListener(ok).addOnFailureListener(err);
+        auth.signInWithEmailAndPassword(email, password)
+                .addOnSuccessListener(ok)
+                .addOnFailureListener(err);
     }
+
     public void createUser(@NonNull String email, @NonNull String password,
                            @NonNull OnSuccessListener<AuthResult> ok,
                            @NonNull OnFailureListener err) {
-        auth.createUserWithEmailAndPassword(email, password).addOnSuccessListener(ok).addOnFailureListener(err);
+        auth.createUserWithEmailAndPassword(email, password)
+                .addOnSuccessListener(ok)
+                .addOnFailureListener(err);
     }
+
     public FirebaseUser currentUser() { return auth.getCurrentUser(); }
 
     // ---------- User ----------
@@ -98,7 +116,6 @@ public class FirestoreRepo {
         stats.put("mayor_pasos_dia",       0L);
         stats.put("metas_diarias_total",   0L);
         stats.put("metas_semana_total",    0L);
-        // NUEVO: marca de inicio de ciclo semanal
         stats.put("week_started_at", System.currentTimeMillis());
 
         data.put("usu_stats", stats);
@@ -138,7 +155,7 @@ public class FirestoreRepo {
             ensureMissingLong  (snap, up, "usu_stats.mayor_pasos_dia",      0L);
             ensureMissingLong  (snap, up, "usu_stats.metas_diarias_total",  0L);
             ensureMissingLong  (snap, up, "usu_stats.metas_semana_total",   0L);
-            // NUEVO: si falta inicio de semana, poner ahora
+            // inicio de semana
             if (!(snap.get("usu_stats.week_started_at") instanceof Number)) {
                 up.put("usu_stats.week_started_at", System.currentTimeMillis());
             }
@@ -155,10 +172,14 @@ public class FirestoreRepo {
     }
 
     public Query rankingHoy() {
-        return db.collection("users").orderBy("usu_stats.mayor_pasos_dia", Query.Direction.DESCENDING).limit(50);
+        return db.collection("users")
+                .orderBy("usu_stats.mayor_pasos_dia", Query.Direction.DESCENDING)
+                .limit(50);
     }
     public Query rankingSemana() {
-        return db.collection("users").orderBy("usu_stats.km_semana", Query.Direction.DESCENDING).limit(50);
+        return db.collection("users")
+                .orderBy("usu_stats.km_semana", Query.Direction.DESCENDING)
+                .limit(50);
     }
 
     // ---------- Saldo ----------
@@ -245,12 +266,18 @@ public class FirestoreRepo {
         if (d.contains("medio")  || d.contains("normal")) return 0.2;
         return 0.1;
     }
+
     private long dailyFor(int nivel, String dif) {
-        int n = Math.max(1, nivel); double mult = difMultiplier(dif); long base = 1000L;
+        int n = Math.max(1, nivel);
+        double mult = difMultiplier(dif);
+        long base = 1000L;
         return Math.round(base * (1.0 + mult * Math.sqrt(n - 1)));
     }
+
     private long weeklyFor(int nivel, String dif) {
-        int n = Math.max(1, nivel); double mult = difMultiplier(dif); long base = 10000L;
+        int n = Math.max(1, nivel);
+        double mult = difMultiplier(dif);
+        long base = 10000L;
         return Math.round(base * (1.0 + mult * Math.sqrt(n - 1)));
     }
 
@@ -279,10 +306,6 @@ public class FirestoreRepo {
         syncGoalsWithDifficulty(uid, nuevaDifi, ok, err);
     }
 
-    /**
-     * Cambia dificultad respetando cooldown de 1 semana.
-     * Usa campo: usu_difi_changed_at (epoch millis).
-     */
     public void changeDifficultyWithCooldown(@NonNull String uid, @NonNull String nuevaDifi,
                                              @NonNull OnSuccessListener<Void> ok,
                                              @NonNull OnFailureListener err) {
@@ -314,12 +337,6 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    /**
-     * Reinicia nivel y metas (sin tocar saldo ni otras stats).
-     * usu_nivel = 1
-     * meta_diaria = 1000
-     * meta_semanal = 10000
-     */
     public void resetLevelAndGoals(@NonNull String uid,
                                    @NonNull OnSuccessListener<Void> ok,
                                    @NonNull OnFailureListener err) {
@@ -677,14 +694,17 @@ public class FirestoreRepo {
         }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 
-    // ---- Cofres (sin cambios) ----
+    // ---- Cofres ----
     public static class ChestResult {
         public final boolean duplicated;
         public final String cosmeticId;
         public final String cosmeticName;
         public final long refundGranted;
         ChestResult(boolean duplicated, String cosmeticId, String cosmeticName, long refundGranted) {
-            this.duplicated = duplicated; this.cosmeticId = cosmeticId; this.cosmeticName = cosmeticName; this.refundGranted = refundGranted;
+            this.duplicated = duplicated;
+            this.cosmeticId = cosmeticId;
+            this.cosmeticName = cosmeticName;
+            this.refundGranted = refundGranted;
         }
     }
 
@@ -703,7 +723,10 @@ public class FirestoreRepo {
                 .get()
                 .addOnSuccessListener(qs -> {
                     List<DocumentSnapshot> all = qs.getDocuments();
-                    if (all.isEmpty()) { err.onFailure(new IllegalStateException("Sin premios disponibles.")); return; }
+                    if (all.isEmpty()) {
+                        err.onFailure(new IllegalStateException("Sin premios disponibles."));
+                        return;
+                    }
 
                     DocumentSnapshot chosen = all.get(new Random().nextInt(all.size()));
                     String cosId = chosen.getId();
@@ -746,5 +769,171 @@ public class FirestoreRepo {
                     }).addOnSuccessListener(ok).addOnFailureListener(err);
                 })
                 .addOnFailureListener(err);
+    }
+
+    // =================== ROOMS (VS) ===================
+
+    /**
+     * Crea una sala de prueba para el usuario dado si todavía no tiene ninguna.
+     * (Solo para testing, podés no usarlo.)
+     */
+    public void ensureTestRoomForUser(@NonNull String ownerUid,
+                                      @NonNull OnSuccessListener<Void> ok,
+                                      @NonNull OnFailureListener err) {
+
+        roomsCol()
+                .whereEqualTo("roo_user", ownerUid)
+                .limit(1)
+                .get()
+                .addOnSuccessListener(qs -> {
+                    if (!qs.isEmpty()) {
+                        ok.onSuccess(null);
+                        return;
+                    }
+
+                    boolean isRace = true; // para test, carrera fija
+                    long targetSteps = 30_000;
+                    long days = 0;
+
+                    Map<String,Object> data = new HashMap<>();
+                    data.put("roo_user", ownerUid);
+                    data.put("roo_public", true);           // pública para probar
+                    data.put("roo_code", "");               // sin código porque es pública
+                    data.put("roo_createdAt", FieldValue.serverTimestamp());
+                    data.put("roo_type", isRace);           // true=carrera, false=maratón
+                    data.put("roo_targetSteps", targetSteps);
+                    data.put("roo_days", days);
+                    List<String> players = new ArrayList<>();
+                    players.add(ownerUid);
+                    data.put("roo_players", players);
+                    data.put("roo_finished", false);
+
+                    roomsCol().add(data)
+                            .addOnSuccessListener(doc -> ok.onSuccess(null))
+                            .addOnFailureListener(err);
+                })
+                .addOnFailureListener(err);
+    }
+
+    /**
+     * Crea una sala a partir de las opciones elegidas en CreatorFragment.
+     *
+     * @param ownerUid uid del creador
+     * @param isPublic true = pública, false = privada
+     * @param isRace   true = carrera, false = maratón
+     * @param code     código de 4 letras para privadas ("" o null si es pública)
+     */
+    public void createRoomFromOptions(@NonNull String ownerUid,
+                                      boolean isPublic,
+                                      boolean isRace,
+                                      @Nullable String code,
+                                      @NonNull OnSuccessListener<Void> ok,
+                                      @NonNull OnFailureListener err) {
+
+        int[] raceTargets = {30000, 40000, 50000};
+        int[] marathonDays = {3, 4, 5};
+        Random r = new Random();
+
+        long targetSteps = isRace ? raceTargets[r.nextInt(raceTargets.length)] : 0;
+        long days = isRace ? 0 : marathonDays[r.nextInt(marathonDays.length)];
+
+        Map<String,Object> data = new HashMap<>();
+        data.put("roo_user", ownerUid);
+        data.put("roo_public", isPublic);
+        data.put("roo_code", isPublic ? "" :
+                (code == null ? "" : code.toUpperCase(Locale.US)));
+        data.put("roo_createdAt", FieldValue.serverTimestamp());
+        data.put("roo_type", isRace);           // true=carrera, false=maratón
+        data.put("roo_targetSteps", targetSteps);
+        data.put("roo_days", days);
+
+        List<String> players = new ArrayList<>();
+        players.add(ownerUid);                  // el creador también está en la sala
+        data.put("roo_players", players);
+
+        data.put("roo_finished", false);
+
+        roomsCol().add(data)
+                .addOnSuccessListener(doc -> ok.onSuccess(null))
+                .addOnFailureListener(err);
+    }
+
+    /**
+     * Al unirse un jugador:
+     *  - valida que la sala exista y no esté llena
+     *  - crea un documento en la colección "versus" con los jugadores
+     *  - borra el documento de "rooms"
+     */
+    public void joinRoomAndStartMatch(@NonNull String roomId,
+                                      @NonNull String joinerUid,
+                                      @NonNull OnSuccessListener<String> ok,
+                                      @NonNull OnFailureListener err) {
+
+        DocumentReference roomRef = roomsCol().document(roomId);
+
+        db.runTransaction((Transaction.Function<String>) tr -> {
+            DocumentSnapshot room = tr.get(roomRef);
+            if (!room.exists()) {
+                throw new IllegalStateException("La sala ya no existe.");
+            }
+
+            Boolean finished = room.getBoolean("roo_finished");
+            if (finished != null && finished) {
+                throw new IllegalStateException("La sala está cerrada.");
+            }
+
+            // jugadores en la sala (normalmente solo el owner)
+            List<String> players = new ArrayList<>();
+            Object rawPlayers = room.get("roo_players");
+            if (rawPlayers instanceof List) {
+                for (Object o : (List<?>) rawPlayers) {
+                    if (o instanceof String) players.add((String) o);
+                }
+            }
+
+            if (players.contains(joinerUid)) {
+                throw new IllegalStateException("Ya estás en esta sala.");
+            }
+            if (players.size() >= 2) {
+                throw new IllegalStateException("La sala ya tiene dos jugadores.");
+            }
+
+            String ownerUid = room.getString("roo_user");
+            if (ownerUid == null || ownerUid.isEmpty()) {
+                throw new IllegalStateException("Sala inválida.");
+            }
+
+            // construimos los datos del versus
+            List<String> vsPlayers = new ArrayList<>(players);
+            vsPlayers.add(joinerUid);
+
+            Map<String,Object> vsData = new HashMap<>();
+            vsData.put("ver_owner", ownerUid);
+            vsData.put("ver_players", vsPlayers);
+            vsData.put("ver_type",
+                    room.getBoolean("roo_type") != null && room.getBoolean("roo_type"));
+            vsData.put("ver_targetSteps", room.get("roo_targetSteps"));
+            vsData.put("ver_days", room.get("roo_days"));
+            vsData.put("ver_createdAt", FieldValue.serverTimestamp());
+            vsData.put("ver_finished", false);
+
+            // progreso por jugador (para pasos, etc.)
+            Map<String,Object> progress = new HashMap<>();
+            for (String pUid : vsPlayers) {
+                Map<String,Object> p = new HashMap<>();
+                p.put("steps", 0L);
+                p.put("joinedAt", FieldValue.serverTimestamp());
+                progress.put(pUid, p);
+            }
+            vsData.put("ver_progress", progress);
+
+            DocumentReference vsRef = versusCol().document();
+            tr.set(vsRef, vsData);
+
+            // borramos la sala de espera
+            tr.delete(roomRef);
+
+            return vsRef.getId();
+        }).addOnSuccessListener(ok).addOnFailureListener(err);
     }
 }
