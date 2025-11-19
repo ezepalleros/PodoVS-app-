@@ -774,54 +774,7 @@ public class FirestoreRepo {
     // =================== ROOMS (VS) ===================
 
     /**
-     * Crea una sala de prueba para el usuario dado si todavía no tiene ninguna.
-     * (Solo para testing, podés no usarlo.)
-     */
-    public void ensureTestRoomForUser(@NonNull String ownerUid,
-                                      @NonNull OnSuccessListener<Void> ok,
-                                      @NonNull OnFailureListener err) {
-
-        roomsCol()
-                .whereEqualTo("roo_user", ownerUid)
-                .limit(1)
-                .get()
-                .addOnSuccessListener(qs -> {
-                    if (!qs.isEmpty()) {
-                        ok.onSuccess(null);
-                        return;
-                    }
-
-                    boolean isRace = true; // para test, carrera fija
-                    long targetSteps = 30_000;
-                    long days = 0;
-
-                    Map<String,Object> data = new HashMap<>();
-                    data.put("roo_user", ownerUid);
-                    data.put("roo_public", true);           // pública para probar
-                    data.put("roo_code", "");               // sin código porque es pública
-                    data.put("roo_createdAt", FieldValue.serverTimestamp());
-                    data.put("roo_type", isRace);           // true=carrera, false=maratón
-                    data.put("roo_targetSteps", targetSteps);
-                    data.put("roo_days", days);
-                    List<String> players = new ArrayList<>();
-                    players.add(ownerUid);
-                    data.put("roo_players", players);
-                    data.put("roo_finished", false);
-
-                    roomsCol().add(data)
-                            .addOnSuccessListener(doc -> ok.onSuccess(null))
-                            .addOnFailureListener(err);
-                })
-                .addOnFailureListener(err);
-    }
-
-    /**
      * Crea una sala a partir de las opciones elegidas en CreatorFragment.
-     *
-     * @param ownerUid uid del creador
-     * @param isPublic true = pública, false = privada
-     * @param isRace   true = carrera, false = maratón
-     * @param code     código de 4 letras para privadas ("" o null si es pública)
      */
     public void createRoomFromOptions(@NonNull String ownerUid,
                                       boolean isPublic,
@@ -830,12 +783,12 @@ public class FirestoreRepo {
                                       @NonNull OnSuccessListener<Void> ok,
                                       @NonNull OnFailureListener err) {
 
-        int[] raceTargets = {30000, 40000, 50000};
-        int[] marathonDays = {3, 4, 5};
+        int[] raceTargets   = {30000, 40000, 50000};
+        int[] marathonDays  = {3, 4, 5};
         Random r = new Random();
 
         long targetSteps = isRace ? raceTargets[r.nextInt(raceTargets.length)] : 0;
-        long days = isRace ? 0 : marathonDays[r.nextInt(marathonDays.length)];
+        long days        = isRace ? 0 : marathonDays[r.nextInt(marathonDays.length)];
 
         Map<String,Object> data = new HashMap<>();
         data.put("roo_user", ownerUid);
@@ -859,13 +812,15 @@ public class FirestoreRepo {
     }
 
     /**
-     * Al unirse un jugador:
-     *  - valida que la sala exista y no esté llena
-     *  - crea un documento en la colección "versus" con los jugadores
-     *  - borra el documento de "rooms"
+     * Unirse a una sala (con o sin código).
+     *
+     * @param roomId    id del documento en "rooms"
+     * @param joinerUid uid del que se une
+     * @param codeInput código que escribió el usuario (null para públicas)
      */
     public void joinRoomAndStartMatch(@NonNull String roomId,
                                       @NonNull String joinerUid,
+                                      @Nullable String codeInput,
                                       @NonNull OnSuccessListener<String> ok,
                                       @NonNull OnFailureListener err) {
 
@@ -880,6 +835,21 @@ public class FirestoreRepo {
             Boolean finished = room.getBoolean("roo_finished");
             if (finished != null && finished) {
                 throw new IllegalStateException("La sala está cerrada.");
+            }
+
+            Boolean isPublic = room.getBoolean("roo_public");
+            if (isPublic == null) isPublic = true;
+
+            String storedCode = room.getString("roo_code");
+            String normalizedStored = storedCode == null ? "" :
+                    storedCode.trim().toUpperCase(Locale.US);
+            String normalizedInput = codeInput == null ? "" :
+                    codeInput.trim().toUpperCase(Locale.US);
+
+            // si es privada y hay código, debe coincidir
+            if (!isPublic && !normalizedStored.isEmpty()
+                    && !normalizedStored.equals(normalizedInput)) {
+                throw new IllegalStateException("Código incorrecto.");
             }
 
             // jugadores en la sala (normalmente solo el owner)
@@ -917,7 +887,6 @@ public class FirestoreRepo {
             vsData.put("ver_createdAt", FieldValue.serverTimestamp());
             vsData.put("ver_finished", false);
 
-            // progreso por jugador (para pasos, etc.)
             Map<String,Object> progress = new HashMap<>();
             for (String pUid : vsPlayers) {
                 Map<String,Object> p = new HashMap<>();

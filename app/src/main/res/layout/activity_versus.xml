@@ -18,72 +18,131 @@
             android:orientation="vertical"
             android:padding="16dp">
 
+            <!-- header disponible -->
             <TextView
                 android:id="@+id/tvVsAvailable"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Versus disponibles: 3 / 3"
+                android:paddingBottom="4dp"
+                android:text="Versus disponibles:"
+                android:textColor="#111827"
                 android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="#111827"
-                android:paddingBottom="4dp"/>
+                android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Podés tener hasta 3 versus activos al mismo tiempo."
-                android:textSize="13sp"
-                android:textColor="#4B5563"
-                android:paddingBottom="12dp"/>
-
-            <!-- Versus en progreso -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Versus en progreso"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="#111827"
-                android:paddingBottom="4dp"/>
-
+            <!-- barra visual de energía (versus disponibles) -->
             <LinearLayout
-                android:id="@+id/containerActive"
+                android:id="@+id/llEnergyBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="8dp">
+
+                <ImageView
+                    android:id="@+id/ivEnergy1"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="4dp"
+                    app:srcCompat="@drawable/energy_empty" />
+
+                <ImageView
+                    android:id="@+id/ivEnergy2"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="4dp"
+                    app:srcCompat="@drawable/energy_empty" />
+
+                <ImageView
+                    android:id="@+id/ivEnergy3"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    app:srcCompat="@drawable/energy_empty" />
+            </LinearLayout>
+
+            <!-- CARD: Versus en progreso -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingBottom="12dp"/>
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#EEF2FF">
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E5E7EB"
-                android:layout_marginBottom="12dp"/>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-            <!-- Salas disponibles -->
-            <TextView
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Versus en progreso"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="#111827"
+                        android:paddingBottom="4dp"/>
+
+                    <LinearLayout
+                        android:id="@+id/containerActive"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"/>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- CARD: Salas disponibles -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Salas públicas y privadas disponibles"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="#111827"
-                android:paddingBottom="4dp"/>
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#ECFDF5">
 
-            <LinearLayout
-                android:id="@+id/containerRooms"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingBottom="16dp"/>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-            <Button
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Salas públicas y privadas disponibles"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="#111827"
+                        android:paddingBottom="4dp"/>
+
+                    <LinearLayout
+                        android:id="@+id/containerRooms"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"/>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Botón crear sala lindo -->
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnCreateRoom"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="Crear sala"
                 android:textAllCaps="false"
                 android:textColor="@android:color/white"
-                android:backgroundTint="#6366F1"/>
+                app:cornerRadius="24dp"
+                app:icon="@drawable/energy_charged"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:backgroundTint="#4F46E5" />
+
         </LinearLayout>
     </ScrollView>
 

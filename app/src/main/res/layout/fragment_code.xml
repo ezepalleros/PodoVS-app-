@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Esta sala es privada. Ingresá el código de 4 letras para unirte."
+        android:textSize="14sp"
+        android:textColor="#4B5563"
+        android:paddingBottom="8dp"/>
+
+    <EditText
+        android:id="@+id/etRoomCode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Ej: ABXD"
+        android:maxLength="4"
+        android:inputType="textCapCharacters"
+        android:importantForAutofill="no"
+        android:singleLine="true"
+        android:padding="8dp"
+        android:background="@android:drawable/edit_text" />
+</LinearLayout>
