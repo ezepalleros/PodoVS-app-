@@ -1,213 +1,360 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/rootOverlay"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#80000000"
-    android:padding="20dp">
+    android:background="#80000000">
 
-    <!-- Ventana modal centrada -->
-<androidx.cardview.widget.CardView
-android:id="@+id/cardModal"
-android:layout_width="match_parent"
-android:layout_height="wrap_content"
-android:layout_gravity="center"
-app:cardBackgroundColor="#2B2B2F"
-app:cardCornerRadius="18dp"
-app:cardElevation="8dp">
-
-<LinearLayout
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="18dp">
-
-    <!-- Header -->
+    <!-- Contenedor central del diálogo -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-        <TextView
-            android:id="@+id/tvTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Metas"
-            android:textColor="@android:color/white"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <ImageButton
-            android:id="@+id/btnClose"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_menu_close_clear_cancel" />
-    </LinearLayout>
-
-    <!-- Contenido scrolleable por si crece -->
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fillViewport="true"
-        android:overScrollMode="ifContentScrolls">
-
-        <LinearLayout
-            android:id="@+id/contentLinear"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:divider="?android:attr/dividerVertical"
-            android:showDividers="middle">
+            app:cardBackgroundColor="#2B2B2F"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="6dp">
 
-            <!-- Card Meta Diaria -->
             <LinearLayout
-                android:id="@+id/cardDaily"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="#32333A"
-                android:padding="16dp"
-                android:clipToOutline="true">
+                android:padding="16dp">
 
-                <TextView
-                    android:id="@+id/tvDailyTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textStyle="bold"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:text="Meta diaria"/>
-
-                <TextView
-                    android:id="@+id/tvDailyMeta"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="#C7CAD1"
-                    android:text="Meta diaria: 0 pasos"/>
-
-                <ProgressBar
-                    android:id="@+id/pbDaily"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="10dp"
-                    android:layout_marginTop="10dp"
-                    android:progress="0"
-                    android:max="100"
-                    android:progressTint="#6FE6B7"
-                    android:background="#14000000"/>
-
-                <TextView
-                    android:id="@+id/tvDailyProgress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold"
-                    android:text="0 / 0"/>
-
-                <TextView
-                    android:id="@+id/tvDailyCoins"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="#C7CAD1"
-                    android:text="Recompensa posible: 0"/>
-
-                <TextView
-                    android:id="@+id/tvDailyState"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="#6FE6B7"
-                    android:text="Disponible" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnDailyClaim"
+                <!-- header -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="Reclamar diaria"/>
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Metas"
+                        android:textColor="@android:color/white"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <ImageButton
+                        android:id="@+id/btnClose"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@android:color/transparent"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        app:tint="@android:color/white" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp" />
+
+                <!-- ================= META DIARIA ================= -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="#32333A"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp">
+
+                    <FrameLayout
+                        android:id="@+id/containerDaily"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <!-- contenido normal -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="14dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Meta diaria"
+                                android:textColor="@android:color/white"
+                                android:textSize="15sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvDailyMeta"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Meta diaria: 8.000 pasos"
+                                android:textColor="#C7CAD1"
+                                android:textSize="13sp" />
+
+                            <ProgressBar
+                                android:id="@+id/pbDaily"
+                                style="?android:attr/progressBarStyleHorizontal"
+                                android:layout_width="match_parent"
+                                android:layout_height="10dp"
+                                android:layout_marginTop="8dp"
+                                android:background="#19000000"
+                                android:max="100"
+                                android:progress="0"
+                                android:progressTint="#6FE6B7" />
+
+                            <TextView
+                                android:id="@+id/tvDailyProgress"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="0 / 8.000"
+                                android:textColor="#E5E7EB"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvDailyCoins"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Recompensa posible: 8.000"
+                                android:textColor="#FDE68A"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvDailyState"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Estado"
+                                android:textColor="#A6A9B1"
+                                android:textSize="13sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnDailyClaim"
+                                android:layout_width="match_parent"
+                                android:layout_height="40dp"
+                                android:layout_marginTop="8dp"
+                                android:backgroundTint="#4F46E5"
+                                android:text="Reclamar meta diaria"
+                                android:textAllCaps="false"
+                                android:textColor="@android:color/white"
+                                app:cornerRadius="20dp" />
+                        </LinearLayout>
+
+                        <!-- overlay de bloqueo diaria -->
+                        <LinearLayout
+                            android:id="@+id/overlayDailyLock"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="#D0000000"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:elevation="12dp"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <com.google.android.material.card.MaterialCardView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_margin="16dp"
+                                app:cardBackgroundColor="#2563EB"
+                                app:cardCornerRadius="18dp"
+                                app:cardElevation="4dp">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center"
+                                    android:orientation="vertical"
+                                    android:padding="14dp">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Meta diaria completada"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="16sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/tvDailyLock"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="6dp"
+                                        android:text="Faltan 0h"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:gravity="center"
+                                        android:text="Podrás intentarla de nuevo cuando se reinicie el día."
+                                        android:textColor="#E5E7EB"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                            </com.google.android.material.card.MaterialCardView>
+                        </LinearLayout>
+
+                    </FrameLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ================= META SEMANAL ================= -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="#32333A"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp">
+
+                    <FrameLayout
+                        android:id="@+id/containerWeekly"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <!-- contenido normal -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="14dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Meta semanal"
+                                android:textColor="@android:color/white"
+                                android:textSize="15sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvWeeklyMeta"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Meta semanal: 56.000 pasos"
+                                android:textColor="#C7CAD1"
+                                android:textSize="13sp" />
+
+                            <ProgressBar
+                                android:id="@+id/pbWeekly"
+                                style="?android:attr/progressBarStyleHorizontal"
+                                android:layout_width="match_parent"
+                                android:layout_height="10dp"
+                                android:layout_marginTop="8dp"
+                                android:background="#19000000"
+                                android:max="100"
+                                android:progress="0"
+                                android:progressTint="#6FE6B7" />
+
+                            <TextView
+                                android:id="@+id/tvWeeklyProgress"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="0 / 56.000"
+                                android:textColor="#E5E7EB"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvWeeklyCoins"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Recompensa posible: 56.000"
+                                android:textColor="#FDE68A"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvWeeklyState"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Estado"
+                                android:textColor="#A6A9B1"
+                                android:textSize="13sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnWeeklyClaim"
+                                android:layout_width="match_parent"
+                                android:layout_height="40dp"
+                                android:layout_marginTop="8dp"
+                                android:backgroundTint="#059669"
+                                android:text="Reclamar meta semanal"
+                                android:textAllCaps="false"
+                                android:textColor="@android:color/white"
+                                app:cornerRadius="20dp" />
+                        </LinearLayout>
+
+                        <!-- overlay de bloqueo semanal -->
+                        <LinearLayout
+                            android:id="@+id/overlayWeeklyLock"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="#D0000000"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:elevation="12dp"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <com.google.android.material.card.MaterialCardView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_margin="16dp"
+                                app:cardBackgroundColor="#16A34A"
+                                app:cardCornerRadius="18dp"
+                                app:cardElevation="4dp">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center"
+                                    android:orientation="vertical"
+                                    android:padding="14dp">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Meta semanal completada"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="16sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/tvWeeklyLock"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="6dp"
+                                        android:text="Faltan 0d"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:gravity="center"
+                                        android:text="El desafío semanal se reseteará cuando termine el período actual."
+                                        android:textColor="#E5E7EB"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                            </com.google.android.material.card.MaterialCardView>
+                        </LinearLayout>
+
+                    </FrameLayout>
+                </com.google.android.material.card.MaterialCardView>
+
             </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
-            <!-- Card Meta Semanal -->
-            <LinearLayout
-                android:id="@+id/cardWeekly"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#32333A"
-                android:padding="16dp"
-                android:clipToOutline="true">
+    </LinearLayout>
 
-                <TextView
-                    android:id="@+id/tvWeeklyTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textStyle="bold"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:text="Meta semanal"/>
-
-                <TextView
-                    android:id="@+id/tvWeeklyMeta"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="#C7CAD1"
-                    android:text="Meta semanal: 0 pasos"/>
-
-                <ProgressBar
-                    android:id="@+id/pbWeekly"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="10dp"
-                    android:layout_marginTop="10dp"
-                    android:progress="0"
-                    android:max="100"
-                    android:progressTint="#FF9E3D"
-                    android:background="#14000000"/>
-
-                <TextView
-                    android:id="@+id/tvWeeklyProgress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold"
-                    android:text="0 / 0"/>
-
-                <TextView
-                    android:id="@+id/tvWeeklyCoins"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="#C7CAD1"
-                    android:text="Recompensa posible: 0"/>
-
-                <TextView
-                    android:id="@+id/tvWeeklyState"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="#6FE6B7"
-                    android:text="Disponible" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnWeeklyClaim"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="Reclamar semanal"/>
-            </LinearLayout>
-
-        </LinearLayout>
-    </ScrollView>
-
-</LinearLayout>
-</androidx.cardview.widget.CardView>
 </FrameLayout>
