@@ -1,11 +1,13 @@
 package com.example.podovs;
 
+import android.app.Dialog;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -15,21 +17,15 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.DialogFragment;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
+
 import java.util.Locale;
 import java.util.Random;
 
 public class CreatorFragment extends DialogFragment {
 
     private static final String ARG_UID = "uid";
-
-    private String uid;
-    private FirestoreRepo repo;
-
-    private SwitchCompat swPublic;
-    private RadioGroup rgMode;
-    private TextView tvCodeLabel;
-    private TextView tvCodeValue;
-    private Button btnCreate;
 
     public static CreatorFragment newInstance(@NonNull String uid) {
         CreatorFragment f = new CreatorFragment();
@@ -39,96 +35,142 @@ public class CreatorFragment extends DialogFragment {
         return f;
     }
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        repo = new FirestoreRepo();
-        if (getArguments() != null) {
-            uid = getArguments().getString(ARG_UID);
-        }
-    }
+    private String uid;
+    private FirestoreRepo repo;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-
-        View v = inflater.inflate(R.layout.fragment_creator, container, false);
-
-        swPublic = v.findViewById(R.id.swPublic);
-        rgMode = v.findViewById(R.id.rgMode);
-        tvCodeLabel = v.findViewById(R.id.tvCodeLabel);
-        tvCodeValue = v.findViewById(R.id.tvCodeValue);
-        btnCreate = v.findViewById(R.id.btnCreateRoomConfirm);
-
-        // por defecto pública / carrera
-        swPublic.setChecked(true);
-        rgMode.check(R.id.rbRace);
-
-        updateCodeVisibility();
-
-        swPublic.setOnCheckedChangeListener((buttonView, isChecked) -> updateCodeVisibility());
-
-        btnCreate.setOnClickListener(view -> onCreateClicked());
-
-        return v;
+        // OJO: usamos fragment_creator, dialog_create_room NO existe.
+        return inflater.inflate(R.layout.fragment_creator, container, false);
     }
 
-    private void updateCodeVisibility() {
-        boolean isPublic = swPublic.isChecked();
-        if (isPublic) {
-            tvCodeLabel.setVisibility(View.GONE);
-            tvCodeValue.setVisibility(View.GONE);
-        } else {
-            tvCodeLabel.setVisibility(View.VISIBLE);
-            tvCodeValue.setVisibility(View.VISIBLE);
-            tvCodeValue.setText(generateCode());
+    @Override
+    public void onViewCreated(@NonNull View view,
+                              @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+
+        uid = getArguments() != null ? getArguments().getString(ARG_UID) : null;
+        repo = new FirestoreRepo();
+
+        View rootOverlay = view.findViewById(R.id.rootCreateRoomOverlay);
+        MaterialCardView card = view.findViewById(R.id.cardCreateRoom);
+        SwitchCompat swPublic = view.findViewById(R.id.swPublic);
+        RadioGroup rgMode = view.findViewById(R.id.rgMode);
+        TextView tvCodeLabel = view.findViewById(R.id.tvCodeLabel);
+        TextView tvCodeValue = view.findViewById(R.id.tvCodeValue);
+        MaterialButton btnCreate = view.findViewById(R.id.btnCreateRoomConfirm);
+        View btnClose = view.findViewById(R.id.btnCloseDialog);
+
+        // cerrar tocando afuera
+        if (rootOverlay != null) {
+            rootOverlay.setOnClickListener(v -> dismiss());
+        }
+        if (card != null) {
+            // consumir el click para que no se cierre al tocar dentro
+            card.setOnClickListener(v -> {});
+        }
+
+        if (btnClose != null) {
+            btnClose.setOnClickListener(v -> dismiss());
+        }
+
+        // código aleatorio
+        String code = generateCode();
+        if (tvCodeValue != null) {
+            tvCodeValue.setText(code);
+        }
+
+        if (swPublic != null) {
+            swPublic.setChecked(true);
+        }
+        updateCodeVisibility(swPublic == null || swPublic.isChecked(), tvCodeLabel, tvCodeValue);
+
+        if (swPublic != null) {
+            swPublic.setOnCheckedChangeListener((buttonView, isChecked) ->
+                    updateCodeVisibility(isChecked, tvCodeLabel, tvCodeValue));
+        }
+
+        if (rgMode != null && rgMode.getCheckedRadioButtonId() == View.NO_ID) {
+            rgMode.check(R.id.rbRace);
+        }
+
+        if (btnCreate != null) {
+            btnCreate.setOnClickListener(v -> {
+                if (uid == null) {
+                    Toast.makeText(getContext(), "Error de sesión", Toast.LENGTH_SHORT).show();
+                    dismiss();
+                    return;
+                }
+                boolean isPublic = swPublic == null || swPublic.isChecked();
+                boolean isRace = true;
+                if (rgMode != null) {
+                    isRace = rgMode.getCheckedRadioButtonId() != R.id.rbMarathon;
+                }
+
+                String finalCode = null;
+                if (!isPublic && tvCodeValue != null) {
+                    finalCode = tvCodeValue.getText().toString().trim();
+                }
+
+                if (!isPublic && TextUtils.isEmpty(finalCode)) {
+                    Toast.makeText(getContext(), "Código inválido", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                repo.createRoomFromOptions(
+                        uid,
+                        isPublic,
+                        isRace,
+                        finalCode,
+                        aVoid -> {
+                            Toast.makeText(getContext(), "Sala creada", Toast.LENGTH_SHORT).show();
+                            dismiss();
+                        },
+                        e -> Toast.makeText(getContext(),
+                                e.getMessage() == null ? "Error al crear sala" : e.getMessage(),
+                                Toast.LENGTH_SHORT).show()
+                );
+            });
+        }
+    }
+
+    private void updateCodeVisibility(boolean isPublic,
+                                      @Nullable TextView label,
+                                      @Nullable TextView value) {
+        float alpha = isPublic ? 0.3f : 1f;
+        int visibility = isPublic ? View.GONE : View.VISIBLE;
+
+        if (label != null) {
+            label.setAlpha(alpha);
+            label.setVisibility(visibility);
+        }
+        if (value != null) {
+            value.setAlpha(alpha);
+            value.setVisibility(visibility);
         }
     }
 
     private String generateCode() {
-        char[] letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray();
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         Random r = new Random();
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 4; i++) {
-            sb.append(letters[r.nextInt(letters.length)]);
+        for (int i = 0; i < 6; i++) {
+            sb.append(chars.charAt(r.nextInt(chars.length())));
         }
-        return sb.toString();
+        return sb.toString().toUpperCase(Locale.US);
     }
 
-    private void onCreateClicked() {
-        if (uid == null || uid.isEmpty()) {
-            Toast.makeText(getContext(), "Error de sesión.", Toast.LENGTH_SHORT).show();
-            dismiss();
-            return;
+    @Override
+    public void onStart() {
+        super.onStart();
+        Dialog d = getDialog();
+        if (d != null && d.getWindow() != null) {
+            d.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+            d.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         }
-
-        boolean isPublic = swPublic.isChecked();
-        int checkedId = rgMode.getCheckedRadioButtonId();
-        boolean isRace = checkedId == R.id.rbRace;
-
-        String code = isPublic ? "" : tvCodeValue.getText().toString().trim();
-        if (!isPublic && code.length() != 4) {
-            Toast.makeText(getContext(), "Código inválido.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        btnCreate.setEnabled(false);
-
-        repo.createRoomFromOptions(uid, isPublic, isRace, code,
-                v -> {
-                    Toast.makeText(getContext(),
-                            "Sala creada correctamente.",
-                            Toast.LENGTH_SHORT).show();
-                    dismiss();
-                },
-                e -> {
-                    btnCreate.setEnabled(true);
-                    String msg = (e != null && e.getMessage() != null)
-                            ? e.getMessage()
-                            : "Error al crear la sala.";
-                    Toast.makeText(getContext(), msg, Toast.LENGTH_LONG).show();
-                });
     }
 }
