@@ -160,7 +160,7 @@ public class VsInfoFragment extends DialogFragment {
             tvTime.setText("");
         }
 
-        String winnerId = snap.getString("ver_winner");
+        String winnerId = snap.getString("ver_winnerUid");
         if (finished && !TextUtils.isEmpty(winnerId)) {
             String label = winnerId.equals(myUid) ? "Ganaste este versus" :
                     "Ganador: @" + winnerId.substring(0, Math.min(6, winnerId.length()));

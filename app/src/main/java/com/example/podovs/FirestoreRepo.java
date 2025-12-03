@@ -855,7 +855,7 @@ public class FirestoreRepo {
                         return;
                     }
 
-                    int[] raceTargets   = {30000, 40000, 50000};
+                    int[] raceTargets   = {10000, 20000, 30000};
                     int[] marathonDays  = {3, 4, 5};
                     Random r = new Random();
 

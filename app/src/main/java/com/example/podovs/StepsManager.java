@@ -8,6 +8,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -39,6 +40,9 @@ public class StepsManager {
     private final Sensor stepCounter;
     private final Sensor stepDetector;
 
+    // Wakelock para mantener CPU despierto aunque la pantalla esté apagada
+    private final PowerManager.WakeLock wakeLock;
+
     private boolean usingDetector = false;
     private volatile boolean listening = false;
 
@@ -53,9 +57,10 @@ public class StepsManager {
         this.callback = callback;
 
         sensorManager = (SensorManager) appCtx.getSystemService(Context.SENSOR_SERVICE);
-        stepCounter   = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
-        stepDetector  = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+        stepCounter   = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) : null;
+        stepDetector  = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR) : null;
 
+        // Inicializamos las keys de hoy
         keyBaseToday  = todayKey(KEY_BASE_PREFIX);
         keyTotalToday = todayKey(KEY_TOTAL_PREFIX);
 
@@ -77,6 +82,15 @@ public class StepsManager {
                 }
             }
         }
+
+        // Creamos un wakelock parcial "alocado"
+        PowerManager pm = (PowerManager) appCtx.getSystemService(Context.POWER_SERVICE);
+        if (pm != null) {
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PodoVS:StepWakeLock");
+            wakeLock.setReferenceCounted(false);
+        } else {
+            wakeLock = null;
+        }
     }
 
     // Compatibilidad con ctor legacy
@@ -85,7 +99,18 @@ public class StepsManager {
     }
 
     public void start() {
-        if (listening) { emitUpdate(); return; }
+        // YA loco: si ya estamos escuchando, solo emitimos
+        if (listening) {
+            emitUpdate();
+            return;
+        }
+
+        if (sensorManager == null) {
+            listening = false;
+            emitUpdate();
+            return;
+        }
+
         if (stepCounter != null) {
             usingDetector = false;
             sensorManager.registerListener(listener, stepCounter, SensorManager.SENSOR_DELAY_GAME);
@@ -93,29 +118,52 @@ public class StepsManager {
             usingDetector = true;
             sensorManager.registerListener(listener, stepDetector, SensorManager.SENSOR_DELAY_GAME);
         } else {
-            listening = false; emitUpdate(); return;
+            listening = false;
+            emitUpdate();
+            return;
         }
         listening = true;
 
+        // ¡Alocado! Mantenemos CPU despierto siempre que se haya llamado a start()
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            try {
+                wakeLock.acquire();
+            } catch (Exception ignored) {}
+        }
+
         if (tickScheduler == null || tickScheduler.isShutdown()) {
             tickScheduler = Executors.newSingleThreadScheduledExecutor();
-            tickScheduler.scheduleAtFixedRate(this::emitUpdate, 0, 3, TimeUnit.SECONDS);
+            // No hace falta spamear, cada 5 segundos alcanza
+            tickScheduler.scheduleAtFixedRate(this::emitUpdate, 0, 5, TimeUnit.SECONDS);
         }
         emitUpdate();
     }
 
     public void stop() {
-        if (listening) {
-            try { sensorManager.unregisterListener(listener); } catch (Exception ignore) {}
-            listening = false;
+        // Versión ALUCINADA:
+        // - NO desregistramos el listener (queremos seguir recibiendo pasos aunque la Activity pare)
+        // - NO liberamos el wakelock (queda vivo mientras el proceso viva)
+        // Solo frenamos el scheduler de callbacks periódicos para no gastar de más en UI
+
+        if (tickScheduler != null) {
+            tickScheduler.shutdownNow();
+            tickScheduler = null;
         }
-        if (tickScheduler != null) { tickScheduler.shutdownNow(); tickScheduler = null; }
+
+        // NO tocamos sensorManager.unregisterListener(listener);
+        // NO tocamos wakeLock.release();
+        // listening queda true para que sepamos que el sensor sigue activo
     }
 
     public long getStepsToday() { return stepsToday; }
-    public double getKmToday()  { return round2(stepsToday * METROS_POR_PASO / 1000.0); }
+
+    public double getKmToday()  {
+        return round2(stepsToday * METROS_POR_PASO / 1000.0);
+    }
+
     public long getDailyRecordLocal() {
-        return appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).getLong(KEY_RECORD_STEPS, 0L);
+        return appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
+                .getLong(KEY_RECORD_STEPS, 0L);
     }
 
     private final SensorEventListener listener = new SensorEventListener() {
@@ -171,10 +219,13 @@ public class StepsManager {
     private void emitUpdate() {
         final long s = stepsToday;
         final double km = round2(s * METROS_POR_PASO / 1000.0);
-        mainHandler.post(() -> { if (callback != null) callback.onStepsUpdated(s, km); });
+        mainHandler.post(() -> {
+            if (callback != null) callback.onStepsUpdated(s, km);
+        });
     }
 
     private String todayKey(String prefix) { return prefix + dayCode(); }
+
     private String dayCode() {
         return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date());
     }
@@ -183,7 +234,6 @@ public class StepsManager {
     private void ensureTodayKeys() {
         String expectedBase = todayKey(KEY_BASE_PREFIX);
         if (!expectedBase.equals(keyBaseToday)) {
-            // guardar récord local si corresponde
             SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
             long record = prefs.getLong(KEY_RECORD_STEPS, 0L);
             if (stepsToday > record) {
@@ -203,7 +253,8 @@ public class StepsManager {
 
     private void saveToday(long steps) {
         appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).edit()
-                .putLong(keyTotalToday, steps).apply();
+                .putLong(keyTotalToday, steps)
+                .apply();
     }
 
     private static double round2(double v) { return Math.round(v * 100.0) / 100.0; }
