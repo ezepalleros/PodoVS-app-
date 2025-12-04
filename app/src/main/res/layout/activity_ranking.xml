@@ -30,13 +30,6 @@
                 android:textColor="#111827"/>
 
             <!-- Subtítulo general -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Mirá tu tabla semanal y el top global de caminadores."
-                android:textSize="13sp"
-                android:textColor="#6B7280"
-                android:layout_marginTop="4dp"/>
 
             <!-- ======================= ZONA RANKING SEMANAL ======================= -->
             <com.google.android.material.card.MaterialCardView

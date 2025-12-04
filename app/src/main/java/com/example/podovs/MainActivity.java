@@ -474,14 +474,31 @@ public class MainActivity extends AppCompatActivity {
                         ? r.asset
                         : "https://res.cloudinary.com/" + getString(R.string.cloudinary_cloud_name) + "/image/upload/" + r.asset + (r.asset.contains(".") ? "" : ".png");
 
-                Glide.with(this).asDrawable().load(url).into(new CustomTarget<Drawable>() {
-                    @Override public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
-                        slots[idx] = resource;
-                        done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
-                    }
-                    @Override public void onLoadCleared(@Nullable Drawable placeholder) { done[0]++; maybeFinishOrdered(slots, done[0], total, cb); }
-                    @Override public void onLoadFailed(@Nullable Drawable errorDrawable) { done[0]++; maybeFinishOrdered(slots, done[0], total, cb); }
-                });
+                Glide.with(getApplicationContext())
+                        .asDrawable()
+                        .load(url)
+                        .into(new CustomTarget<Drawable>() {
+                            @Override
+                            public void onResourceReady(@NonNull Drawable resource,
+                                                        @Nullable Transition<? super Drawable> transition) {
+                                slots[idx] = resource;
+                                done[0]++;
+                                maybeFinishOrdered(slots, done[0], total, cb);
+                            }
+
+                            @Override
+                            public void onLoadCleared(@Nullable Drawable placeholder) {
+                                done[0]++;
+                                maybeFinishOrdered(slots, done[0], total, cb);
+                            }
+
+                            @Override
+                            public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                                done[0]++;
+                                maybeFinishOrdered(slots, done[0], total, cb);
+                            }
+                        });
+
             }
         }
     }

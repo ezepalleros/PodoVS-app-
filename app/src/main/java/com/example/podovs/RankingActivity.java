@@ -91,6 +91,17 @@ public class RankingActivity extends AppCompatActivity {
         });
     }
 
+    // ---------- abrir perfil desde ranking ----------
+    private void openUserProfile(@NonNull String otherUid, @NonNull String displayName) {
+        if (otherUid.equals(uid)) {
+            // si toca su propio nombre, muestro su perfil editable
+            new ProfileFragment().show(getSupportFragmentManager(), "profile_self");
+        } else {
+            ProfileFragment f = ProfileFragment.newInstanceForUser(otherUid, displayName, false);
+            f.show(getSupportFragmentManager(), "profile_other");
+        }
+    }
+
     // ---------- RANKING SEMANAL (GRUPO DE HASTA 5) ----------
 
     private void loadWeeklyRanking() {
@@ -219,6 +230,10 @@ public class RankingActivity extends AppCompatActivity {
         tvName.setTextSize(14);
         tvName.setTextColor(row.uid.equals(uid) ? 0xFFB91C1C : 0xFF111827);
 
+        // al tocar el nombre, abrir perfil de ese usuario
+        tvName.setOnClickListener(v ->
+                openUserProfile(row.uid, row.nombre));
+
         TextView tvStats = new TextView(this);
         tvStats.setTextSize(13);
         tvStats.setTextColor(0xFF4B5563);
@@ -316,6 +331,12 @@ public class RankingActivity extends AppCompatActivity {
         tvName.setText(nombre);
         tvName.setTextSize(14);
         tvName.setTextColor(0xFF111827);
+
+        // abrir perfil global
+        String otherUid = snap.getId();
+        String finalNombre = nombre;
+        tvName.setOnClickListener(v ->
+                openUserProfile(otherUid, finalNombre));
 
         TextView tvKm = new TextView(this);
         tvKm.setTextSize(13);

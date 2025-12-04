@@ -35,6 +35,23 @@ import java.util.HashMap;
 
 public class ProfileFragment extends BottomSheetDialogFragment {
 
+    // Args
+    private static final String ARG_UID   = "arg_uid";
+    private static final String ARG_NAME  = "arg_name";
+    private static final String ARG_EDIT  = "arg_editable";
+
+    public static ProfileFragment newInstanceForUser(@NonNull String uid,
+                                                     @Nullable String displayName,
+                                                     boolean editable) {
+        ProfileFragment f = new ProfileFragment();
+        Bundle b = new Bundle();
+        b.putString(ARG_UID, uid);
+        if (displayName != null) b.putString(ARG_NAME, displayName);
+        b.putBoolean(ARG_EDIT, editable);
+        f.setArguments(b);
+        return f;
+    }
+
     // UI
     private ImageView ivAvatar;
     private TextView tvName;
@@ -50,9 +67,15 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     // Repo / sesión
     private FirestoreRepo repo;
     private FirebaseFirestore db;
-    private String uid = null;
 
-    // Config
+    // uid de la sesión (YO)
+    private String myUid = null;
+    // uid del perfil que se está mostrando
+    private String profileUid = null;
+    private boolean isOwner = false;
+    private boolean isEditable = false;
+
+    // Config local
     private static final String PREFS_PROFILE = "profile_prefs";
     private static final String KEY_SLOT1 = "slot1_key";
     private static final String KEY_SLOT2 = "slot2_key";
@@ -62,7 +85,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     // (Opcional) offsets finos por cosmético. Y<0 sube.
     private static final Map<String, int[]> OFFSETS = new HashMap<>();
     static {
-        // Si alguna vez quisieras subir/bajar algo:
         // OFFSETS.put("cos_id_7", new int[]{0, -2}); // ejemplo
     }
 
@@ -80,8 +102,11 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
     public ProfileFragment() {}
 
-    @Nullable @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater,
+                             @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
         return inflater.inflate(R.layout.fragment_profile, container, false);
     }
 
@@ -110,21 +135,50 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         ivAvatar.setScaleType(ImageView.ScaleType.CENTER);
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
-        uid  = requireContext().getSharedPreferences("session", Context.MODE_PRIVATE).getString("uid", null);
+        // ---- uid sesión y uid del perfil ----
+        myUid = requireContext()
+                .getSharedPreferences("session", Context.MODE_PRIVATE)
+                .getString("uid", null);
+
+        Bundle args = getArguments();
+        String argUid = (args != null) ? args.getString(ARG_UID, null) : null;
+        profileUid = (argUid != null) ? argUid : myUid;
+
+        isOwner = (myUid != null && myUid.equals(profileUid));
+        boolean argEdit = (args == null) || args.getBoolean(ARG_EDIT, true);
+        isEditable = isOwner && argEdit;
+
+        // Nombre “provisorio” si vino por args (RankingActivity)
+        if (args != null) {
+            String argName = args.getString(ARG_NAME, null);
+            if (!TextUtils.isEmpty(argName)) tvName.setText(argName);
+        }
+
+        // Si es vista de otro usuario: oculto edición
+        if (!isEditable) {
+            btnEdit1.setVisibility(View.GONE);
+            btnEdit2.setVisibility(View.GONE);
+        }
+
         repo = new FirestoreRepo();
         db   = FirebaseFirestore.getInstance();
 
         loadHeaderAndCards();
 
-        btnEdit1.setOnClickListener(view -> showPickerForSlot(1));
-        btnEdit2.setOnClickListener(view -> showPickerForSlot(2));
+        if (isEditable) {
+            btnEdit1.setOnClickListener(view -> showPickerForSlot(1));
+            btnEdit2.setOnClickListener(view -> showPickerForSlot(2));
+        } else {
+            btnEdit1.setOnClickListener(null);
+            btnEdit2.setOnClickListener(null);
+        }
     }
 
     // ---------- Header ----------
     private void loadHeaderAndCards() {
-        if (uid == null) return;
+        if (profileUid == null) return;
 
-        repo.getUser(uid, (DocumentSnapshot snap) -> {
+        repo.getUser(profileUid, (DocumentSnapshot snap) -> {
             if (snap == null || !snap.exists() || !isAdded()) return;
 
             String nombre = snap.getString("usu_nombre");
@@ -143,13 +197,37 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     }
 
     private void refreshStatCardsWithSnapshot(DocumentSnapshot snap) {
-        SharedPreferences sp = requireContext().getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
         String default1 = "usu_stats.km_total";
         String default2 = "usu_stats.objetos_comprados";
 
-        String k1 = sp.getString(KEY_SLOT1, default1);
-        String k2 = sp.getString(KEY_SLOT2, default2);
-        if (TextUtils.equals(k1, k2)) k2 = default2;
+        // Lo que tenga guardado el usuario en Firestore (para que otros lo vean)
+        String chosen1Server = snap.getString("usu_chosen1Key");
+        String chosen2Server = snap.getString("usu_chosen2Key");
+
+        String k1, k2;
+
+        if (isOwner) {
+            // Para mí: leo primero de SharedPreferences, después server, después default
+            SharedPreferences sp = requireContext()
+                    .getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
+            String sp1 = sp.getString(KEY_SLOT1, null);
+            String sp2 = sp.getString(KEY_SLOT2, null);
+
+            k1 = !TextUtils.isEmpty(sp1) ? sp1
+                    : (!TextUtils.isEmpty(chosen1Server) ? chosen1Server : default1);
+            k2 = !TextUtils.isEmpty(sp2) ? sp2
+                    : (!TextUtils.isEmpty(chosen2Server) ? chosen2Server : default2);
+
+            if (TextUtils.equals(k1, k2)) k2 = default2;
+
+            // sincronizo prefs locales con lo que efectivamente estoy usando
+            sp.edit().putString(KEY_SLOT1, k1).putString(KEY_SLOT2, k2).apply();
+        } else {
+            // Para otros usuarios: ignoro prefs locales, uso lo del server o defaults
+            k1 = !TextUtils.isEmpty(chosen1Server) ? chosen1Server : default1;
+            k2 = !TextUtils.isEmpty(chosen2Server) ? chosen2Server : default2;
+            if (TextUtils.equals(k1, k2)) k2 = default2;
+        }
 
         Map<String, Object> values = readAllMetricsFromSnapshot(snap);
 
@@ -173,21 +251,33 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         return map;
     }
 
-    private String titleFor(String key) { String t = METRIC_TITLES.get(key); return (t == null) ? key : t; }
+    private String titleFor(String key) {
+        String t = METRIC_TITLES.get(key);
+        return (t == null) ? key : t;
+    }
+
     private String formatValue(String key, Object value) {
         if (key.endsWith("km_total")) {
-            double km = (value instanceof Number) ? ((Number) value).doubleValue() : 0d;
+            double km = (value instanceof Number)
+                    ? ((Number) value).doubleValue()
+                    : 0d;
             return String.format(Locale.getDefault(), "%.2f", km);
         }
         if (key.endsWith("mejor_posicion")) {
-            long pos = (value instanceof Number) ? ((Number) value).longValue() : 0L;
+            long pos = (value instanceof Number)
+                    ? ((Number) value).longValue()
+                    : 0L;
             return pos <= 0 ? "-" : String.valueOf(pos);
         }
-        long v = (value instanceof Number) ? ((Number) value).longValue() : 0L;
+        long v = (value instanceof Number)
+                ? ((Number) value).longValue()
+                : 0L;
         return String.format(Locale.getDefault(), "%,d", v);
     }
 
     private void showPickerForSlot(int slot) {
+        if (!isEditable) return;
+
         final String[] keys = METRIC_TITLES.keySet().toArray(new String[0]);
         final String[] titles = METRIC_TITLES.values().toArray(new String[0]);
 
@@ -195,12 +285,32 @@ public class ProfileFragment extends BottomSheetDialogFragment {
                 .setTitle("Elegí una estadística")
                 .setItems(titles, (dialog, which) -> {
                     String chosenKey = keys[which];
-                    SharedPreferences sp = requireContext().getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
+                    SharedPreferences sp = requireContext()
+                            .getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
                     if (slot == 1) sp.edit().putString(KEY_SLOT1, chosenKey).apply();
                     else           sp.edit().putString(KEY_SLOT2, chosenKey).apply();
+
+                    // subo a Firestore para que otros vean esta elección
+                    pushChosenStatsToServer();
                     loadHeaderAndCards();
                 })
                 .show();
+    }
+
+    private void pushChosenStatsToServer() {
+        if (!isOwner || profileUid == null) return;
+
+        SharedPreferences sp = requireContext()
+                .getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
+
+        String default1 = "usu_stats.km_total";
+        String default2 = "usu_stats.objetos_comprados";
+
+        String k1 = sp.getString(KEY_SLOT1, default1);
+        String k2 = sp.getString(KEY_SLOT2, default2);
+        if (TextUtils.equals(k1, k2)) k2 = default2;
+
+        repo.updateChosenStatsForUser(profileUid, k1, k2);
     }
 
     // ===================== AVATAR =====================
@@ -211,22 +321,29 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         String zapasId    = asString(snap.get("usu_equipped.usu_zapas"));
         String cabezaId   = asString(snap.get("usu_equipped.usu_cabeza"));
 
-        if (pielId == null && pantalonId == null && remeraId == null && zapasId == null && cabezaId == null) {
+        if (pielId == null && pantalonId == null && remeraId == null
+                && zapasId == null && cabezaId == null) {
             int fallback = getResIdByName("piel_startskin");
             if (fallback != 0 && isAdded()) ivAvatar.setImageResource(fallback);
             return;
         }
 
-        FirebaseFirestore.getInstance().collection("users").document(
-                        requireContext().getSharedPreferences("session", Context.MODE_PRIVATE).getString("uid", ""))
+        if (profileUid == null) return;
+
+        FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(profileUid)
                 .collection("my_cosmetics")
                 .get()
-                .addOnSuccessListener(qs -> buildAvatarFromMyCosmetics(qs, pielId, pantalonId, remeraId, zapasId, cabezaId));
+                .addOnSuccessListener(qs ->
+                        buildAvatarFromMyCosmetics(qs, pielId, pantalonId, remeraId, zapasId, cabezaId));
     }
 
     private void buildAvatarFromMyCosmetics(QuerySnapshot qs,
-                                            @Nullable String pielId, @Nullable String pantalonId,
-                                            @Nullable String remeraId, @Nullable String zapasId,
+                                            @Nullable String pielId,
+                                            @Nullable String pantalonId,
+                                            @Nullable String remeraId,
+                                            @Nullable String zapasId,
                                             @Nullable String cabezaId) {
         if (!isAdded()) return;
 
@@ -243,7 +360,7 @@ public class ProfileFragment extends BottomSheetDialogFragment {
             if (def != 0) ivAvatar.setImageResource(def);
             return;
         }
-        loadAllDrawables(reqs, layers -> composeAndShow(layers));
+        loadAllDrawables(reqs, this::composeAndShow);
     }
 
     // ---------- carga/composición ----------
@@ -283,38 +400,58 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
         for (LayerReq r : reqs) {
             loadDrawable(r.asset, new CustomTarget<Drawable>() {
-                @Override public void onResourceReady(@NonNull Drawable res, @Nullable Transition<? super Drawable> t) {
+                @Override
+                public void onResourceReady(@NonNull Drawable res,
+                                            @Nullable Transition<? super Drawable> t) {
                     result.add(new Layer(res, r.offX, r.offY));
                     if (++count[0] == total && isAdded()) cb.onReady(result);
                 }
-                @Override public void onLoadCleared(@Nullable Drawable placeholder) {
+
+                @Override
+                public void onLoadCleared(@Nullable Drawable placeholder) {
                     // no-op
                 }
             });
         }
     }
 
-    private void loadDrawable(@Nullable String asset, @NonNull CustomTarget<Drawable> target) {
+    private void loadDrawable(@Nullable String asset,
+                              @NonNull CustomTarget<Drawable> target) {
         if (!isAdded()) return;
-        if (asset == null) { target.onResourceReady(new EmptyDrawable(), null); return; }
+        if (asset == null) {
+            target.onResourceReady(new EmptyDrawable(), null);
+            return;
+        }
 
         if (asset.startsWith("http")) {
-            Glide.with(requireContext()).asDrawable().load(asset).into(target);
+            Glide.with(requireContext())
+                    .asDrawable()
+                    .load(asset)
+                    .into(target);
         } else {
             int resId = getResIdByName(asset);
-            Drawable d = (resId != 0) ? ContextCompat.getDrawable(requireContext(), resId) : null;
-            target.onResourceReady((d != null) ? d : new EmptyDrawable(), null);
+            Drawable d = (resId != 0)
+                    ? ContextCompat.getDrawable(requireContext(), resId)
+                    : null;
+            target.onResourceReady(
+                    (d != null) ? d : new EmptyDrawable(), null);
         }
     }
 
     private interface OnLayersReady { void onReady(ArrayList<Layer> layers); }
+
     private static class LayerReq {
-        final String asset; final int offX; final int offY;
-        LayerReq(String a, int x, int y) { asset=a; offX=x; offY=y; }
+        final String asset;
+        final int offX;
+        final int offY;
+        LayerReq(String a, int x, int y) { asset = a; offX = x; offY = y; }
     }
+
     private static class Layer {
-        final Drawable drawable; final int offX; final int offY;
-        Layer(Drawable d, int x, int y) { drawable=d; offX=x; offY=y; }
+        final Drawable drawable;
+        final int offX;
+        final int offY;
+        Layer(Drawable d, int x, int y) { drawable = d; offX = x; offY = y; }
     }
 
     // Transparente por si algo falla
@@ -328,33 +465,53 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     }
 
     // ---------- util de avatar ----------
-    private void addReq(QuerySnapshot qs, ArrayList<LayerReq> out, @Nullable String cosId) {
+    private void addReq(QuerySnapshot qs,
+                        ArrayList<LayerReq> out,
+                        @Nullable String cosId) {
         if (cosId == null) return;
         String asset = findAssetFor(qs, cosId);
         if (asset == null) return;
-        int[] off = OFFSETS.getOrDefault(cosId, new int[]{0,0});
+        int[] off = OFFSETS.getOrDefault(cosId, new int[]{0, 0});
         out.add(new LayerReq(asset, off[0], off[1]));
     }
 
-    @Nullable private String findAssetFor(QuerySnapshot qs, @Nullable String cosId) {
+    @Nullable
+    private String findAssetFor(QuerySnapshot qs, @Nullable String cosId) {
         if (cosId == null) return null;
         for (DocumentSnapshot d : qs.getDocuments()) {
             if (cosId.equals(d.getId())) {
                 Object v = d.get("myc_cache.cos_asset");
-                if (v instanceof String && !((String) v).isEmpty()) return (String) v; // puede ser URL o nombre
+                if (v instanceof String && !((String) v).isEmpty()) {
+                    // puede ser URL o nombre de recurso
+                    return (String) v;
+                }
             }
         }
         return null;
     }
 
-    private int dpToPx(int dp) { return Math.round(dp * getResources().getDisplayMetrics().density); }
-    private int getResIdByName(String name) { return getResources().getIdentifier(name, "drawable", requireContext().getPackageName()); }
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
+    private int getResIdByName(String name) {
+        return getResources()
+                .getIdentifier(name, "drawable",
+                        requireContext().getPackageName());
+    }
 
     // --------- Helpers ---------
     private int safeInt(Long v, int def) { return (v == null) ? def : v.intValue(); }
+
     private long getNestedLong(DocumentSnapshot s, String path, long def) {
         Object v = s.get(path);
         return (v instanceof Number) ? ((Number) v).longValue() : def;
     }
-    @Nullable private String asString(Object o) { return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null; }
+
+    @Nullable
+    private String asString(Object o) {
+        return (o instanceof String && !((String) o).isEmpty())
+                ? (String) o
+                : null;
+    }
 }

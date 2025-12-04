@@ -1418,6 +1418,20 @@ public class FirestoreRepo {
                 });
     }
 
+    public void updateChosenStatsForUser(@NonNull String uid,
+                                         @Nullable String slot1Key,
+                                         @Nullable String slot2Key) {
+        Map<String, Object> up = new HashMap<>();
+        if (slot1Key != null && !slot1Key.trim().isEmpty()) {
+            up.put("usu_chosen1Key", slot1Key);
+        }
+        if (slot2Key != null && !slot2Key.trim().isEmpty()) {
+            up.put("usu_chosen2Key", slot2Key);
+        }
+        if (up.isEmpty()) return;
+        userDoc(uid).update(up);
+    }
+
     private void assignUserToWeeklyRanking(@NonNull String uid,
                                            long weekKey,
                                            @NonNull OnSuccessListener<DocumentSnapshot> ok,
@@ -1504,6 +1518,16 @@ public class FirestoreRepo {
                 .addOnFailureListener(err);
     }
 
+    public void updateChosenStats(@NonNull String uid,
+                                  @Nullable String title1, @Nullable String value1,
+                                  @Nullable String title2, @Nullable String value2) {
+        Map<String, Object> up = new HashMap<>();
+        up.put("usu_chosen1",     title1 == null ? "" : title1);
+        up.put("usu_chosenInfo1", value1 == null ? "" : value1);
+        up.put("usu_chosen2",     title2 == null ? "" : title2);
+        up.put("usu_chosenInfo2", value2 == null ? "" : value2);
+        userDoc(uid).update(up);
+    }
     private void buildWeeklyRows(@NonNull DocumentSnapshot rankingDoc,
                                  long weekKey,
                                  @NonNull OnSuccessListener<WeeklyRankingResult> ok,
