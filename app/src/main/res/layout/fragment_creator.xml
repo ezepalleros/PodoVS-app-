@@ -129,7 +129,6 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Compartí este código con tu rival para que pueda entrar."
                     android:textColor="#9CA3AF"
                     android:textSize="12sp"
                     android:paddingBottom="12dp" />

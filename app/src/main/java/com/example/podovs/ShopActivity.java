@@ -190,7 +190,11 @@ public class ShopActivity extends AppCompatActivity {
         });
 
         btnEvt.setOnClickListener(v -> safeNavigate("com.example.podovs.EventsActivity", "Eventos próximamente"));
-        btnLb.setOnClickListener(v -> safeNavigate("com.example.podovs.LeaderboardsActivity", "Tablas próximamente"));
+        btnLb.setOnClickListener(v -> {
+            startActivity(new Intent(this, RankingActivity.class));
+            finish();
+        });
+
     }
 
     @Override

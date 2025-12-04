@@ -135,8 +135,10 @@ public class VersusActivity extends AppCompatActivity {
         });
         btnEvt.setOnClickListener(v ->
                 Toast.makeText(this, "Eventos próximamente", Toast.LENGTH_SHORT).show());
-        btnLb.setOnClickListener(v ->
-                Toast.makeText(this, "Rankings próximamente", Toast.LENGTH_SHORT).show());
+        btnLb.setOnClickListener(v -> {
+            startActivity(new Intent(this, RankingActivity.class));
+            finish();
+        });
 
         btnCreateRoom.setOnClickListener(v -> {
             CreatorFragment frag = CreatorFragment.newInstance(uid);

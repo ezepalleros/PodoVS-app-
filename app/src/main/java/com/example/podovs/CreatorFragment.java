@@ -157,7 +157,7 @@ public class CreatorFragment extends DialogFragment {
         String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         Random r = new Random();
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 4; i++) {
             sb.append(chars.charAt(r.nextInt(chars.length())));
         }
         return sb.toString().toUpperCase(Locale.US);

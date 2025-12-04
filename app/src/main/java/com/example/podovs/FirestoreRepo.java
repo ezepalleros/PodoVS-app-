@@ -26,6 +26,8 @@ import com.google.firebase.firestore.Transaction;
 import com.google.firebase.firestore.WriteBatch;
 
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -39,7 +41,7 @@ public class FirestoreRepo {
     private final FirebaseAuth auth;
 
     private static final int XP_PER_LEVEL = 100;
-    private static final long WEEK_MS = 7L * 24L * 60L * 60L * 1000L;
+    public static final long WEEK_MS = 7L * 24L * 60L * 60L * 1000L;
 
     public static final int MAX_ACTIVE_VERSUS = 3;
 
@@ -64,10 +66,30 @@ public class FirestoreRepo {
         return userDoc(uid).collection("my_cosmetics").document(cosId);
     }
 
-    // rooms / versus
-    private CollectionReference roomsCol() { return db.collection("rooms"); }
-    private CollectionReference versusCol() { return db.collection("versus"); }
+    // rooms / versus / rankings
+    private CollectionReference roomsCol()   { return db.collection("rooms"); }
+    private CollectionReference versusCol()  { return db.collection("versus"); }
+    private CollectionReference rankingsCol(){ return db.collection("rankings"); }
     private DocumentReference versusDoc(@NonNull String id) { return versusCol().document(id); }
+
+    /**
+     * WeekKey alineado a lunes 00:00 (en la zona horaria del dispositivo).
+     * Todas las fechas de una misma semana (lunes 00:00 a siguiente lunes 00:00)
+     * comparten el mismo weekKey.
+     */
+    private long currentWeekKey() {
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(System.currentTimeMillis());
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        while (cal.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+            cal.add(Calendar.DAY_OF_MONTH, -1);
+        }
+        long mondayStart = cal.getTimeInMillis();
+        return mondayStart / WEEK_MS;
+    }
 
     // ---------- Auth ----------
     public void signIn(@NonNull String email, @NonNull String password,
@@ -188,6 +210,13 @@ public class FirestoreRepo {
         return db.collection("users")
                 .orderBy("usu_stats.km_semana", Query.Direction.DESCENDING)
                 .limit(50);
+    }
+
+    /** Top global: 5 usuarios con más km_total. */
+    public Query rankingGlobalKmTotalTop5() {
+        return db.collection("users")
+                .orderBy("usu_stats.km_total", Query.Direction.DESCENDING)
+                .limit(5);
     }
 
     // ---------- Saldo ----------
@@ -1115,7 +1144,8 @@ public class FirestoreRepo {
             Long targetL = vs.getLong("ver_targetSteps");
             long targetSteps = targetL != null ? targetL : 0L;
             Long daysL = vs.getLong("ver_days");
-            long days = daysL != null ? daysL : 0L;
+            long days = daysL != null ? 0L : 0L;
+            if (daysL != null) days = daysL;
 
             boolean shouldFinish = false;
             String winnerUid = null;
@@ -1216,5 +1246,342 @@ public class FirestoreRepo {
                                        @NonNull String uid,
                                        long stepsToday) {
         updateVersusSteps(versusId, uid, stepsToday, v -> {}, e -> {});
+    }
+
+    // ========= RANKINGS SEMANALES =========
+
+    public static class WeeklyRankingRow {
+        public final String uid;
+        public final String nombre;
+        public final double kmSemana;
+        public final long stepsWeek;
+        public final int position;
+        public final long coins;
+
+        public WeeklyRankingRow(String uid,
+                                String nombre,
+                                double kmSemana,
+                                long stepsWeek,
+                                int position,
+                                long coins) {
+            this.uid = uid;
+            this.nombre = nombre;
+            this.kmSemana = kmSemana;
+            this.stepsWeek = stepsWeek;
+            this.position = position;
+            this.coins = coins;
+        }
+    }
+
+    public static class WeeklyRankingResult {
+        public final List<WeeklyRankingRow> rows;
+        public final boolean rewardsApplied; // ya no se usa en UI, siempre false
+        public final long weekKey;
+
+        public WeeklyRankingResult(List<WeeklyRankingRow> rows,
+                                   boolean rewardsApplied,
+                                   long weekKey) {
+            this.rows = rows;
+            this.rewardsApplied = rewardsApplied;
+            this.weekKey = weekKey;
+        }
+    }
+
+    /**
+     * Asegura que el usuario tenga una tabla semanal (grupo de hasta 5 jugadores)
+     * y devuelve las filas ordenadas por km_semana desc.
+     *
+     * Además, limpia tablas de semanas anteriores: reparte recompensas a TODOS
+     * los jugadores de esa tabla y borra esos documentos.
+     */
+    public void loadWeeklyRankingForUser(@NonNull String uid,
+                                         @NonNull OnSuccessListener<WeeklyRankingResult> ok,
+                                         @NonNull OnFailureListener err) {
+
+        long weekKey = currentWeekKey();
+
+        // Limpieza asíncrona de tablas viejas (semanaKey < actual).
+        cleanupOldRankingsForUser(uid, weekKey);
+
+        // Buscar tabla de ESTA semana
+        rankingsCol()
+                .whereEqualTo("ran_weekKey", weekKey)
+                .whereArrayContains("ran_players", uid)
+                .limit(1)
+                .get()
+                .addOnSuccessListener(qs -> {
+                    if (!qs.isEmpty()) {
+                        DocumentSnapshot doc = qs.getDocuments().get(0);
+                        buildWeeklyRows(doc, weekKey, ok, err);
+                    } else {
+                        // Todavía no está en ninguna tabla: lo asignamos a una
+                        assignUserToWeeklyRanking(uid, weekKey,
+                                doc -> buildWeeklyRows(doc, weekKey, ok, err),
+                                err);
+                    }
+                })
+                .addOnFailureListener(err);
+    }
+
+    /** Limpia tablas donde el usuario participó y son de semanas anteriores. */
+    private void cleanupOldRankingsForUser(@NonNull String uid, long currentWeekKey) {
+        rankingsCol()
+                .whereArrayContains("ran_players", uid)
+                .whereLessThan("ran_weekKey", currentWeekKey)
+                .get()
+                .addOnSuccessListener(qs -> {
+                    for (DocumentSnapshot d : qs.getDocuments()) {
+                        applyWeeklyRewardsAndDelete(d);
+                    }
+                });
+        // Si falla, no rompemos el flujo principal; se reintentará en otro momento.
+    }
+
+    /** Aplica recompensas a todos los jugadores de esa tabla y luego borra el doc. */
+    private void applyWeeklyRewardsAndDelete(@NonNull DocumentSnapshot rankingDoc) {
+        Object rawPlayers = rankingDoc.get("ran_players");
+        List<String> players = new ArrayList<>();
+        if (rawPlayers instanceof List) {
+            for (Object o : (List<?>) rawPlayers) {
+                if (o instanceof String) players.add((String) o);
+            }
+        }
+        if (players.isEmpty()) {
+            rankingDoc.getReference().delete();
+            return;
+        }
+
+        List<Task<DocumentSnapshot>> tasks = new ArrayList<>();
+        for (String pid : players) {
+            tasks.add(userDoc(pid).get());
+        }
+
+        Tasks.whenAllSuccess(tasks)
+                .addOnSuccessListener(results -> {
+                    List<WeeklyRankingRow> tmp = new ArrayList<>();
+
+                    for (Object o : results) {
+                        DocumentSnapshot s = (DocumentSnapshot) o;
+                        String pid = s.getId();
+
+                        Double kmD = null;
+                        Object vKm = s.get("usu_stats.km_semana");
+                        if (vKm instanceof Number) kmD = ((Number) vKm).doubleValue();
+                        double km = kmD == null ? 0.0 : kmD;
+                        long stepsWeek = Math.round(km * 1000.0);
+
+                        String nombre = s.getString("usu_nombre");
+                        if (nombre == null || nombre.trim().isEmpty()) {
+                            String shortId = pid;
+                            if (shortId.length() > 6) shortId = shortId.substring(0, 6);
+                            nombre = "@" + shortId;
+                        }
+
+                        tmp.add(new WeeklyRankingRow(pid, nombre, km, stepsWeek, 0, 0L));
+                    }
+
+                    // Ordenar por km_semana desc
+                    Collections.sort(tmp, (a, b) ->
+                            Double.compare(b.kmSemana, a.kmSemana));
+
+                    // Asignar posición y coins (1º triple, 2º doble, 3º igual, resto nada)
+                    List<WeeklyRankingRow> rows = new ArrayList<>();
+                    for (int i = 0; i < tmp.size(); i++) {
+                        WeeklyRankingRow base = tmp.get(i);
+                        int pos = i + 1;
+                        long coins;
+                        if (pos == 1)      coins = base.stepsWeek * 3L;
+                        else if (pos == 2) coins = base.stepsWeek * 2L;
+                        else if (pos == 3) coins = base.stepsWeek;
+                        else               coins = 0L;
+
+                        rows.add(new WeeklyRankingRow(
+                                base.uid,
+                                base.nombre,
+                                base.kmSemana,
+                                base.stepsWeek,
+                                pos,
+                                coins
+                        ));
+                    }
+
+                    // Actualizar saldo de todos y borrar ranking en un batch.
+                    WriteBatch batch = db.batch();
+                    for (WeeklyRankingRow r : rows) {
+                        if (r.coins > 0L) {
+                            batch.update(userDoc(r.uid),
+                                    "usu_saldo", FieldValue.increment(r.coins));
+                        }
+                    }
+                    batch.delete(rankingDoc.getReference());
+                    batch.commit();
+                });
+    }
+
+    private void assignUserToWeeklyRanking(@NonNull String uid,
+                                           long weekKey,
+                                           @NonNull OnSuccessListener<DocumentSnapshot> ok,
+                                           @NonNull OnFailureListener err) {
+
+        rankingsCol()
+                .whereEqualTo("ran_weekKey", weekKey)
+                .whereEqualTo("ran_finished", false)
+                .get()
+                .addOnSuccessListener(qs -> {
+                    List<DocumentSnapshot> candidates = new ArrayList<>();
+                    HashSet<String> usedPlayers = new HashSet<>();
+
+                    // recolectar jugadores ya usados en tablas de esta semana
+                    for (DocumentSnapshot d : qs.getDocuments()) {
+                        Object raw = d.get("ran_players");
+                        if (raw instanceof List) {
+                            for (Object o : (List<?>) raw) {
+                                if (o instanceof String) {
+                                    usedPlayers.add((String) o);
+                                }
+                            }
+                        }
+
+                        List<String> players = new ArrayList<>();
+                        Object rawPlayers = d.get("ran_players");
+                        if (rawPlayers instanceof List) {
+                            for (Object o : (List<?>) rawPlayers) {
+                                if (o instanceof String) players.add((String) o);
+                            }
+                        }
+                        if (!players.contains(uid) && players.size() < 5) {
+                            candidates.add(d);
+                        }
+                    }
+
+                    if (!candidates.isEmpty()) {
+                        // Elige una tabla disponible al azar
+                        DocumentSnapshot chosen = candidates.get(new Random().nextInt(candidates.size()));
+                        DocumentReference ref = chosen.getReference();
+                        ref.update("ran_players", FieldValue.arrayUnion(uid))
+                                .addOnSuccessListener(v ->
+                                        ref.get().addOnSuccessListener(ok).addOnFailureListener(err))
+                                .addOnFailureListener(err);
+                    } else {
+                        // Crear nueva tabla para esta semana y completarla con jugadores al azar
+                        usedPlayers.add(uid);
+
+                        db.collection("users").get()
+                                .addOnSuccessListener(userQs -> {
+                                    List<DocumentSnapshot> users = userQs.getDocuments();
+                                    Collections.shuffle(users, new Random());
+
+                                    List<String> players = new ArrayList<>();
+                                    players.add(uid);
+
+                                    for (DocumentSnapshot uSnap : users) {
+                                        String pid = uSnap.getId();
+                                        if (usedPlayers.contains(pid)) continue;
+                                        if (pid.equals(uid)) continue;
+                                        Boolean susp = uSnap.getBoolean("usu_suspendido");
+                                        if (susp != null && susp) continue;
+
+                                        players.add(pid);
+                                        usedPlayers.add(pid);
+                                        if (players.size() >= 5) break;
+                                    }
+
+                                    Map<String, Object> data = new HashMap<>();
+                                    data.put("ran_weekKey", weekKey);
+                                    data.put("ran_createdAt", System.currentTimeMillis());
+                                    data.put("ran_finished", false);
+                                    data.put("ran_rewardsApplied", false);
+                                    data.put("ran_players", players);
+
+                                    rankingsCol().add(data)
+                                            .addOnSuccessListener(ref ->
+                                                    ref.get().addOnSuccessListener(ok).addOnFailureListener(err))
+                                            .addOnFailureListener(err);
+                                })
+                                .addOnFailureListener(err);
+                    }
+                })
+                .addOnFailureListener(err);
+    }
+
+    private void buildWeeklyRows(@NonNull DocumentSnapshot rankingDoc,
+                                 long weekKey,
+                                 @NonNull OnSuccessListener<WeeklyRankingResult> ok,
+                                 @NonNull OnFailureListener err) {
+
+        Object rawPlayers = rankingDoc.get("ran_players");
+        List<String> players = new ArrayList<>();
+        if (rawPlayers instanceof List) {
+            for (Object o : (List<?>) rawPlayers) {
+                if (o instanceof String) players.add((String) o);
+            }
+        }
+
+        if (players.isEmpty()) {
+            ok.onSuccess(new WeeklyRankingResult(
+                    new ArrayList<>(),
+                    false,
+                    weekKey
+            ));
+            return;
+        }
+
+        // Traemos los usuarios de la tabla
+        List<Task<DocumentSnapshot>> tasks = new ArrayList<>();
+        for (String pid : players) {
+            tasks.add(userDoc(pid).get());
+        }
+
+        Tasks.whenAllSuccess(tasks)
+                .addOnSuccessListener(results -> {
+                    List<WeeklyRankingRow> tmp = new ArrayList<>();
+
+                    for (Object o : results) {
+                        DocumentSnapshot s = (DocumentSnapshot) o;
+                        String pid = s.getId();
+                        Double kmD = null;
+                        Object vKm = s.get("usu_stats.km_semana");
+                        if (vKm instanceof Number) kmD = ((Number) vKm).doubleValue();
+                        double km = kmD == null ? 0.0 : kmD;
+                        long stepsWeek = Math.round(km * 1000.0); // aprox 1000 pasos por km
+
+                        String nombre = s.getString("usu_nombre");
+                        if (nombre == null || nombre.trim().isEmpty()) {
+                            String shortId = pid;
+                            if (shortId.length() > 6) shortId = shortId.substring(0, 6);
+                            nombre = "@" + shortId;
+                        }
+
+                        tmp.add(new WeeklyRankingRow(pid, nombre, km, stepsWeek, 0, 0L));
+                    }
+
+                    // Ordenar por km_semana desc
+                    Collections.sort(tmp, (a, b) ->
+                            Double.compare(b.kmSemana, a.kmSemana));
+
+                    // Asignar posición y coins teóricos (1º triple, 2º doble, 3º igual, resto nada)
+                    List<WeeklyRankingRow> rows = new ArrayList<>();
+                    for (int i = 0; i < tmp.size(); i++) {
+                        WeeklyRankingRow base = tmp.get(i);
+                        int pos = i + 1;
+                        long coins;
+                        if (pos == 1)      coins = base.stepsWeek * 3L;
+                        else if (pos == 2) coins = base.stepsWeek * 2L;
+                        else if (pos == 3) coins = base.stepsWeek;
+                        else               coins = 0L;
+
+                        rows.add(new WeeklyRankingRow(
+                                base.uid,
+                                base.nombre,
+                                base.kmSemana,
+                                base.stepsWeek,
+                                pos,
+                                coins
+                        ));
+                    }
+
+                    ok.onSuccess(new WeeklyRankingResult(rows, false, weekKey));
+                })
+                .addOnFailureListener(err);
     }
 }

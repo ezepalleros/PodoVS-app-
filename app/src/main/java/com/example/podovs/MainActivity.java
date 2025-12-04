@@ -208,10 +208,10 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "Eventos próximamente", Toast.LENGTH_SHORT).show());
         }
 
-        if (btnLb != null) {
-            btnLb.setOnClickListener(v ->
-                    Toast.makeText(this, "Rankings próximamente", Toast.LENGTH_SHORT).show());
-        }
+        btnLb.setOnClickListener(v -> {
+            startActivity(new Intent(this, RankingActivity.class));
+            finish();
+        });
 
         getSupportFragmentManager().setFragmentResultListener("coins_changed", this, (requestKey, bundle) -> {});
 
