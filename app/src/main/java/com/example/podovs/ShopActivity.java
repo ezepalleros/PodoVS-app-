@@ -191,6 +191,11 @@ public class ShopActivity extends AppCompatActivity {
             finish();
         });
 
+        btnLb.setOnClickListener(v -> {
+            startActivity(new Intent(this, RankingActivity.class));
+            finish();
+        });
+
     }
 
     @Override

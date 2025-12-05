@@ -830,6 +830,10 @@ public class FirestoreRepo {
                     DocumentSnapshot snap = transaction.get(vsRef);
                     if (!snap.exists()) return null;
 
+                    // ¿es un versus de evento cooperativo?
+                    Boolean isEventB = snap.getBoolean("ver_isEvent");
+                    boolean isEvent = isEventB != null && isEventB;
+
                     // Leer progreso previo de este jugador
                     Object raw = snap.get("ver_progress." + uid);
                     long prevDevice = 0L;
@@ -873,25 +877,6 @@ public class FirestoreRepo {
                         return null;
                     }
 
-                    // Datos generales del versus
-                    boolean isRace = Boolean.TRUE.equals(snap.getBoolean("ver_type"));
-
-                    long targetSteps = 0L;
-                    Object tObj = snap.get("ver_targetSteps");
-                    if (tObj instanceof Number) targetSteps = ((Number) tObj).longValue();
-
-                    long days = 0L;
-                    Object dObj = snap.get("ver_days");
-                    if (dObj instanceof Number) days = ((Number) dObj).longValue();
-
-                    long createdAtMs = 0L;
-                    Object cObj = snap.get("ver_createdAt");
-                    if (cObj instanceof Timestamp) {
-                        createdAtMs = ((Timestamp) cObj).toDate().getTime();
-                    } else if (cObj instanceof Number) {
-                        createdAtMs = ((Number) cObj).longValue();
-                    }
-
                     // Jugadores
                     List<String> players = new ArrayList<>();
                     Object rawPlayers = snap.get("ver_players");
@@ -907,6 +892,81 @@ public class FirestoreRepo {
                     if (progObj instanceof Map) {
                         //noinspection unchecked
                         progMap = (Map<String, Object>) progObj;
+                    }
+
+                    // ---------- LÓGICA ESPECIAL PARA EVENTO COOPERATIVO ----------
+                    if (isEvent) {
+                        long targetSteps = 0L;
+                        Object tObj = snap.get("ver_targetSteps");
+                        if (tObj instanceof Number) targetSteps = ((Number) tObj).longValue();
+
+                        long totalGroup = 0L;
+                        if (progMap != null) {
+                            for (Map.Entry<String,Object> e : progMap.entrySet()) {
+                                String pid = e.getKey();
+                                long sVal;
+                                if (pid.equals(uid)) {
+                                    sVal = newSteps;
+                                } else {
+                                    sVal = stepsFromProg(progMap, pid);
+                                }
+                                totalGroup += sVal;
+                            }
+                        } else {
+                            totalGroup = newSteps;
+                        }
+
+                        boolean finishedEvent = targetSteps > 0L && totalGroup >= targetSteps;
+                        if (finishedEvent) {
+                            updates.put("ver_finished", true);
+                            updates.put("ver_finishedAt", now);
+                            updates.put("ver_totalSteps", totalGroup);
+
+                            Long rewardCoinsL = snap.getLong("ver_rewardCoins");
+                            long rewardCoins = rewardCoinsL == null ? 0L : rewardCoinsL;
+
+                            if (!players.isEmpty() && rewardCoins > 0L) {
+                                for (String pid : players) {
+                                    Map<String,Object> upUser = new HashMap<>();
+                                    upUser.put("usu_saldo", FieldValue.increment(rewardCoins));
+                                    upUser.put("usu_stats.eventos_participados", FieldValue.increment(1));
+                                    transaction.update(userDoc(pid), upUser);
+                                }
+                            }
+
+                            // La room puede haber sido borrada al crear el versus cooperativo
+                            String roomId = snap.getString("ver_roomId");
+                            if (roomId != null && !roomId.isEmpty()) {
+                                DocumentReference roomRef = roomsCol().document(roomId);
+                                DocumentSnapshot roomSnap = transaction.get(roomRef);
+                                if (roomSnap.exists()) {
+                                    transaction.update(roomRef, "roo_finished", true);
+                                }
+                            }
+                        }
+
+                        transaction.update(vsRef, updates);
+                        return null;
+                    }
+                    // ---------- FIN LÓGICA EVENTO, sigue flujo normal 1vs1 ----------
+
+                    // Datos generales del versus
+                    boolean isRace = Boolean.TRUE.equals(snap.getBoolean("ver_type"));
+
+                    long targetSteps = 0L;
+                    Object tObj2 = snap.get("ver_targetSteps");
+                    if (tObj2 instanceof Number) targetSteps = ((Number) tObj2).longValue();
+
+                    long days = 0L;
+                    Object dObj = snap.get("ver_days");
+                    if (dObj instanceof Number) days = ((Number) dObj).longValue();
+
+                    long createdAtMs = 0L;
+                    Object cObj = snap.get("ver_createdAt");
+                    if (cObj instanceof Timestamp) {
+                        createdAtMs = ((Timestamp) cObj).toDate().getTime();
+                    } else if (cObj instanceof Number) {
+                        createdAtMs = ((Number) cObj).longValue();
                     }
 
                     boolean closeNow = false;

@@ -60,10 +60,14 @@ public class EventActivity extends AppCompatActivity {
     // Listeners
     private ListenerRegistration eventListener;
     private ListenerRegistration roomsListener;
+    private ListenerRegistration coopVsListener;
 
     // Estado de salas
     private EventRoom myRoom = null;
     private final List<EventRoom> otherRooms = new ArrayList<>();
+
+    // Versus cooperativo (evento)
+    private CoopVersusInfo myCoopVersus = null;
 
     // -------- Salas de evento --------
     static class EventRoom {
@@ -73,6 +77,16 @@ public class EventActivity extends AppCompatActivity {
         String code;
         boolean finished;
         List<String> players = new ArrayList<>();
+    }
+
+    // -------- Versus cooperativo de evento --------
+    static class CoopVersusInfo {
+        String id;
+        long targetSteps;
+        long rewardCoins;
+        boolean finished;
+        List<String> players = new ArrayList<>();
+        Map<String, Long> stepsByPlayer = new HashMap<>();
     }
 
     @Override
@@ -138,6 +152,7 @@ public class EventActivity extends AppCompatActivity {
         super.onDestroy();
         if (eventListener != null) eventListener.remove();
         if (roomsListener != null) roomsListener.remove();
+        if (coopVsListener != null) coopVsListener.remove();
     }
 
     // =========================================================
@@ -239,6 +254,7 @@ public class EventActivity extends AppCompatActivity {
         }
 
         startRoomsListenerForEvent(currentEventId);
+        startCoopVersusListenerForEvent(currentEventId);
         updateCreateButtonState();
     }
 
@@ -254,22 +270,43 @@ public class EventActivity extends AppCompatActivity {
             roomsListener.remove();
             roomsListener = null;
         }
+        if (coopVsListener != null) {
+            coopVsListener.remove();
+            coopVsListener = null;
+        }
 
         myRoom = null;
         otherRooms.clear();
+        myCoopVersus = null;
         renderRooms();
         updateCreateButtonState();
     }
 
-     private void startRoomsListenerForEvent(@NonNull String eventId) {
+    // =================== LISTENERS DE ROOMS / VERSUS ===================
+
+    private void startRoomsListenerForEvent(@NonNull String eventId) {
         if (roomsListener != null) roomsListener.remove();
 
         roomsListener = db.collection("rooms")
                 .whereEqualTo("roo_eventId", eventId)
-                .whereEqualTo("roo_finished", false)
                 .addSnapshotListener((qs, err) -> {
                     if (err != null || qs == null) return;
                     rebuildEventRoomsFromSnapshot(qs);
+                    renderRooms();
+                    updateCreateButtonState();
+                });
+    }
+
+    private void startCoopVersusListenerForEvent(@NonNull String eventId) {
+        if (coopVsListener != null) coopVsListener.remove();
+
+        coopVsListener = db.collection("versus")
+                .whereEqualTo("ver_isEvent", true)
+                .whereEqualTo("ver_eventId", eventId)
+                .whereArrayContains("ver_players", uid)
+                .addSnapshotListener((qs, err) -> {
+                    if (err != null || qs == null) return;
+                    rebuildCoopVersusFromSnapshot(qs);
                     renderRooms();
                     updateCreateButtonState();
                 });
@@ -292,6 +329,10 @@ public class EventActivity extends AppCompatActivity {
             Boolean fin = d.getBoolean("roo_finished");
             r.finished = fin != null && fin;
 
+            if (r.finished) {
+                continue;
+            }
+
             Object playersRaw = d.get("roo_players");
             if (playersRaw instanceof List) {
                 for (Object o : (List<?>) playersRaw) {
@@ -307,13 +348,181 @@ public class EventActivity extends AppCompatActivity {
             } else if (!containsMe) {
                 otherRooms.add(r);
             }
+
+            // Si la sala llegó a 4 jugadores, intentamos crear el VS cooperativo
+            if (r.players.size() >= 4) {
+                maybeCreateCoopVersus(r);
+            }
         }
     }
+
+    private void rebuildCoopVersusFromSnapshot(@NonNull QuerySnapshot qs) {
+        myCoopVersus = null;
+
+        if (qs.isEmpty()) return;
+
+        // Si por algún motivo hubiera más de uno, agarramos el más nuevo
+        DocumentSnapshot chosen = qs.getDocuments().get(0);
+        long bestCreated = getCreatedAtMillis(chosen);
+
+        for (DocumentSnapshot d : qs.getDocuments()) {
+            long c = getCreatedAtMillis(d);
+            if (c > bestCreated) {
+                bestCreated = c;
+                chosen = d;
+            }
+        }
+
+        CoopVersusInfo info = new CoopVersusInfo();
+        info.id = chosen.getId();
+
+        Boolean finB = chosen.getBoolean("ver_finished");
+        info.finished = finB != null && finB;
+
+        Object tObj = chosen.get("ver_targetSteps");
+        if (tObj instanceof Number) info.targetSteps = ((Number) tObj).longValue();
+
+        Object rObj = chosen.get("ver_rewardCoins");
+        if (rObj instanceof Number) info.rewardCoins = ((Number) rObj).longValue();
+
+        Object playersRaw = chosen.get("ver_players");
+        if (playersRaw instanceof List) {
+            for (Object o : (List<?>) playersRaw) {
+                if (o instanceof String) info.players.add((String) o);
+            }
+        }
+
+        Object progObj = chosen.get("ver_progress");
+        if (progObj instanceof Map) {
+            Map<?,?> m = (Map<?,?>) progObj;
+            for (String pid : info.players) {
+                long steps = 0L;
+                Object v = m.get(pid);
+                if (v instanceof Map) {
+                    Object st = ((Map<?,?>) v).get("steps");
+                    if (st instanceof Number) steps = ((Number) st).longValue();
+                }
+                info.stepsByPlayer.put(pid, steps);
+            }
+        }
+
+        myCoopVersus = info;
+    }
+
+    private long getCreatedAtMillis(@NonNull DocumentSnapshot d) {
+        Object cObj = d.get("ver_createdAt");
+        if (cObj instanceof Timestamp) {
+            return ((Timestamp) cObj).toDate().getTime();
+        } else if (cObj instanceof Number) {
+            return ((Number) cObj).longValue();
+        }
+        return 0L;
+    }
+
+    // Crea el versus cooperativo para una sala llena (4 jugadores) si aún no existe
+    private void maybeCreateCoopVersus(@NonNull EventRoom room) {
+        if (currentEventId == null) return;
+
+        final String eventId = currentEventId;
+        final String roomId  = room.id;
+
+        db.runTransaction(tr -> {
+            DocumentSnapshot roomSnap =
+                    tr.get(db.collection("rooms").document(roomId));
+
+            if (!roomSnap.exists()) return null;
+
+            Boolean finished  = roomSnap.getBoolean("roo_finished");
+            Boolean vsCreated = roomSnap.getBoolean("roo_vsCreated");
+
+            // si la sala ya está terminada o ya tiene VS creado, no hacemos nada
+            if (finished != null && finished) return null;
+            if (vsCreated != null && vsCreated) return null;
+
+            // jugadores actuales de la sala
+            List<String> players = new ArrayList<>();
+            Object rawPlayers = roomSnap.get("roo_players");
+            if (rawPlayers instanceof List) {
+                for (Object o : (List<?>) rawPlayers) {
+                    if (o instanceof String) players.add((String) o);
+                }
+            }
+
+            // solo creamos el VS cuando hay 4 jugadores
+            if (players.size() < 4) return null;
+
+            // leemos el evento
+            DocumentSnapshot eventSnap =
+                    tr.get(db.collection("events").document(eventId));
+            if (!eventSnap.exists()) return null;
+
+            long targetSteps = 0L;
+            Object tObj = eventSnap.get("ev_targetSteps");
+            if (tObj instanceof Number) targetSteps = ((Number) tObj).longValue();
+
+            long rewardCoins = 0L;
+            Object rObj = eventSnap.get("ev_rewardCoins");
+            if (rObj instanceof Number) rewardCoins = ((Number) rObj).longValue();
+
+            String ownerUid = roomSnap.getString("roo_user");
+            if ((ownerUid == null || ownerUid.isEmpty()) && !players.isEmpty()) {
+                ownerUid = players.get(0);
+            }
+
+            Map<String, Object> vsData = new HashMap<>();
+            vsData.put("ver_owner", ownerUid);
+            vsData.put("ver_players", players);
+            vsData.put("ver_type", false); // no importa para coop
+            vsData.put("ver_targetSteps", targetSteps);
+            vsData.put("ver_days", 0L);
+            vsData.put("ver_createdAt", FieldValue.serverTimestamp());
+            vsData.put("ver_finished", false);
+            vsData.put("ver_isEvent", true);
+            vsData.put("ver_eventId", eventId);
+            vsData.put("ver_rewardCoins", rewardCoins);
+            vsData.put("ver_roomId", roomId);
+
+            String today = todayCode();
+            Map<String, Object> progress = new HashMap<>();
+            for (String pid : players) {
+                Map<String, Object> p = new HashMap<>();
+                p.put("steps", 0L);
+                p.put("deviceTotal", 0L);
+                p.put("joinedAt", FieldValue.serverTimestamp());
+                p.put("lastUpdate", FieldValue.serverTimestamp());
+                p.put("dayCode", today);
+                progress.put(pid, p);
+            }
+            vsData.put("ver_progress", progress);
+
+            com.google.firebase.firestore.DocumentReference vsRef =
+                    db.collection("versus").document();
+            tr.set(vsRef, vsData);
+
+            // BORRAMOS la room cuando se crea el versus
+            tr.delete(roomSnap.getReference());
+
+            return null;
+        });
+    }
+
+    // =================== RENDER DE UI ===================
 
     private void renderRooms() {
         containerMyEventRoom.removeAllViews();
         containerOtherEventRooms.removeAllViews();
 
+        // Prioridad: si ya hay versus coop, mostramos eso
+        if (myCoopVersus != null) {
+            containerMyEventRoom.addView(makeCoopVersusCard(myCoopVersus));
+
+            containerOtherEventRooms.addView(makeSimpleText(
+                    "Ya estás participando del evento con tu equipo."
+            ));
+            return;
+        }
+
+        // Si no hay versus, mostramos sala (si existe)
         if (myRoom == null) {
             containerMyEventRoom.addView(makeSimpleText(
                     "Todavía no estás en ninguna sala del evento."
@@ -334,7 +543,9 @@ public class EventActivity extends AppCompatActivity {
     }
 
     private void updateCreateButtonState() {
-        boolean canCreate = currentEventId != null && myRoom == null;
+        boolean canCreate = currentEventId != null
+                && myRoom == null
+                && myCoopVersus == null; // si ya tenés equipo, no creás sala
         btnEventCreateRoom.setEnabled(canCreate);
         btnEventCreateRoom.setAlpha(canCreate ? 1f : 0.5f);
     }
@@ -346,6 +557,10 @@ public class EventActivity extends AppCompatActivity {
         }
         if (myRoom != null) {
             Toast.makeText(this, "Ya estás en una sala del evento.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (myCoopVersus != null) {
+            Toast.makeText(this, "Ya estás participando del evento.", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -367,6 +582,7 @@ public class EventActivity extends AppCompatActivity {
         data.put("roo_code", code);
         data.put("roo_createdAt", FieldValue.serverTimestamp());
         data.put("roo_finished", false);
+        data.put("roo_vsCreated", false);
 
         List<String> players = new ArrayList<>();
         players.add(uid);
@@ -399,6 +615,10 @@ public class EventActivity extends AppCompatActivity {
         }
         if (myRoom != null) {
             Toast.makeText(this, "Ya estás en una sala del evento.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (myCoopVersus != null) {
+            Toast.makeText(this, "Ya estás participando del evento.", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -567,6 +787,77 @@ public class EventActivity extends AppCompatActivity {
         return card;
     }
 
+    private View makeCoopVersusCard(@NonNull CoopVersusInfo vs) {
+        MaterialCardView card = new MaterialCardView(this);
+        LinearLayout.LayoutParams lpCard = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lpCard.bottomMargin = dp(12);
+        card.setLayoutParams(lpCard);
+        card.setRadius(dp(18));
+        card.setCardElevation(dp(3));
+        card.setCardBackgroundColor(0xFFFFFFFF);
+        card.setUseCompatPadding(true);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(16), dp(16), dp(16));
+        card.addView(root);
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText("Tu equipo del evento");
+        tvTitle.setTextSize(16);
+        tvTitle.setTextColor(0xFF111827);
+        tvTitle.setPadding(0, 0, 0, dp(4));
+
+        long total = 0L;
+        for (Long v : vs.stepsByPlayer.values()) {
+            if (v != null) total += v;
+        }
+
+        TextView tvInfo = new TextView(this);
+        String linea;
+        if (vs.targetSteps > 0) {
+            linea = String.format(Locale.getDefault(),
+                    "Progreso grupal: %,d / %,d pasos",
+                    total, vs.targetSteps);
+        } else {
+            linea = String.format(Locale.getDefault(),
+                    "Progreso grupal: %,d pasos", total);
+        }
+        if (vs.finished) {
+            linea += "\nEstado: COMPLETADO";
+        } else {
+            linea += "\nEstado: En curso";
+        }
+        tvInfo.setText(linea);
+        tvInfo.setTextSize(13);
+        tvInfo.setTextColor(0xFF4B5563);
+        tvInfo.setPadding(0, 0, 0, dp(8));
+
+        root.addView(tvTitle);
+        root.addView(tvInfo);
+
+        // Aportes individuales
+        for (String pid : vs.players) {
+            long steps = 0L;
+            if (vs.stepsByPlayer.containsKey(pid) && vs.stepsByPlayer.get(pid) != null) {
+                steps = vs.stepsByPlayer.get(pid);
+            }
+
+            TextView tvRow = new TextView(this);
+            tvRow.setText(String.format(Locale.getDefault(),
+                    "%s · %,d pasos",
+                    buildHandle(pid), steps));
+            tvRow.setTextSize(13);
+            tvRow.setTextColor(0xFF111827);
+            tvRow.setPadding(0, dp(2), 0, dp(2));
+            root.addView(tvRow);
+        }
+
+        return card;
+    }
+
     private View makeOtherRoomCard(@NonNull EventRoom r) {
         MaterialCardView card = new MaterialCardView(this);
         LinearLayout.LayoutParams lpCard = new LinearLayout.LayoutParams(
@@ -656,6 +947,12 @@ public class EventActivity extends AppCompatActivity {
 
     private int dp(int v) {
         return (int) (v * getResources().getDisplayMetrics().density);
+    }
+
+    // yyyyMMdd del día actual (mismo formato que FirestoreRepo)
+    private String todayCode() {
+        return new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+                .format(new java.util.Date());
     }
 
     @Nullable

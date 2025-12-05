@@ -220,7 +220,15 @@ public class VersusActivity extends AppCompatActivity {
 
     private void rebuildVersusFromSnapshot(QuerySnapshot qs) {
         myActive.clear();
+        if (qs == null) return;
+
         for (DocumentSnapshot d : qs.getDocuments()) {
+
+            Boolean isEventB = d.getBoolean("ver_isEvent");
+            if (isEventB != null && isEventB) {
+                continue;
+            }
+
             VsRoom r = new VsRoom();
             r.id = d.getId();
             r.ownerId = asString(d.get("ver_owner"));
@@ -240,12 +248,14 @@ public class VersusActivity extends AppCompatActivity {
             Object playersRaw = d.get("ver_players");
             if (playersRaw instanceof List) {
                 List<?> rawList = (List<?>) playersRaw;
-                for (Object o : rawList) if (o instanceof String) r.players.add((String) o);
+                for (Object o : rawList)
+                    if (o instanceof String) r.players.add((String) o);
             }
 
             if (!r.finished) myActive.add(r);
         }
     }
+
 
     private void fetchOwnersForRooms() {
         HashSet<String> missing = new HashSet<>();

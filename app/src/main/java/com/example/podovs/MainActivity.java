@@ -179,7 +179,7 @@ public class MainActivity extends AppCompatActivity {
         long pasosGuardados = userPrefs().getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosGuardados));
 
-        stepsManager = new StepsManager(this, null, 0L,
+        stepsManager = new StepsManager(this, repo, uid,
                 (stepsToday, kmHoy) -> onStepsUpdatedMain(stepsToday));
 
         // Bottom bar

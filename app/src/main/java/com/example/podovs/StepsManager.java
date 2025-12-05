@@ -10,8 +10,16 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.QuerySnapshot;
+
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -49,6 +57,16 @@ public class StepsManager {
     private long stepsToday = 0L;
 
     private ScheduledExecutorService tickScheduler;
+
+    // ---- Firestore / versus ----
+    private FirestoreRepo repo;
+    private String userId;
+    private FirebaseFirestore fs;
+    private ListenerRegistration activeVsListener;
+    private final List<String> activeVersusIds = new ArrayList<>();
+    private long lastPushedSteps = -1L;
+
+    // ================== CONSTRUCTORES ==================
 
     public StepsManager(Context context, Callback callback) {
         this.appCtx = context.getApplicationContext();
@@ -88,9 +106,16 @@ public class StepsManager {
         }
     }
 
-    public StepsManager(Context context, Object ignoredDb, long ignoredUserId, Callback callback) {
+    // Versión que integra Firestore y sincroniza todos los versus activos (incluyendo eventos cooperativos)
+    public StepsManager(Context context, FirestoreRepo repo, String uid, Callback callback) {
         this(context, callback);
+        this.repo = repo;
+        this.userId = uid;
+        this.fs = FirebaseFirestore.getInstance();
+        startActiveVersusListener();
     }
+
+    // ================== CONTROL SENSOR ==================
 
     public void start() {
         if (listening) {
@@ -118,24 +143,33 @@ public class StepsManager {
         listening = true;
 
         if (wakeLock != null && !wakeLock.isHeld()) {
-            try {
-                wakeLock.acquire();
-            } catch (Exception ignored) {}
+            try { wakeLock.acquire(); } catch (Exception ignored) {}
         }
 
         if (tickScheduler == null || tickScheduler.isShutdown()) {
             tickScheduler = Executors.newSingleThreadScheduledExecutor();
-            // No hace falta spamear, cada 5 segundos alcanza
             tickScheduler.scheduleAtFixedRate(this::emitUpdate, 0, 5, TimeUnit.SECONDS);
         }
         emitUpdate();
     }
 
     public void stop() {
-         if (tickScheduler != null) {
+        listening = false;
+
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(listener);
+        }
+
+        if (tickScheduler != null) {
             tickScheduler.shutdownNow();
             tickScheduler = null;
         }
+
+        if (wakeLock != null && wakeLock.isHeld()) {
+            try { wakeLock.release(); } catch (Exception ignored) {}
+        }
+
+        stopActiveVersusListener();
     }
 
     public long getStepsToday() { return stepsToday; }
@@ -148,6 +182,8 @@ public class StepsManager {
         return appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
                 .getLong(KEY_RECORD_STEPS, 0L);
     }
+
+    // ================== SENSOR CALLBACK ==================
 
     private final SensorEventListener listener = new SensorEventListener() {
         @Override public void onSensorChanged(SensorEvent event) {
@@ -198,13 +234,64 @@ public class StepsManager {
         @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
     };
 
+    // ================== EMISIÓN / SYNC VERSUS ==================
+
     private void emitUpdate() {
         final long s = stepsToday;
         final double km = round2(s * METROS_POR_PASO / 1000.0);
+
+        if (repo != null && userId != null) {
+            if (s != lastPushedSteps) {
+                lastPushedSteps = s;
+                pushStepsToAllActiveVersus(s);
+            }
+        }
+
         mainHandler.post(() -> {
             if (callback != null) callback.onStepsUpdated(s, km);
         });
     }
+
+    private void pushStepsToAllActiveVersus(long steps) {
+        List<String> vsIdsCopy;
+        synchronized (activeVersusIds) {
+            vsIdsCopy = new ArrayList<>(activeVersusIds);
+        }
+        for (String vsId : vsIdsCopy) {
+            repo.updateVersusStepsQuiet(vsId, userId, steps);
+        }
+    }
+
+    private void startActiveVersusListener() {
+        if (fs == null || userId == null) return;
+
+        stopActiveVersusListener();
+
+        activeVsListener = fs.collection("versus")
+                .whereArrayContains("ver_players", userId)
+                .whereEqualTo("ver_finished", false)
+                .addSnapshotListener((QuerySnapshot qs, FirebaseFirestoreException e) -> {
+                    if (e != null || qs == null) return;
+                    synchronized (activeVersusIds) {
+                        activeVersusIds.clear();
+                        for (DocumentSnapshot d : qs.getDocuments()) {
+                            activeVersusIds.add(d.getId());
+                        }
+                    }
+                });
+    }
+
+    private void stopActiveVersusListener() {
+        if (activeVsListener != null) {
+            activeVsListener.remove();
+            activeVsListener = null;
+        }
+        synchronized (activeVersusIds) {
+            activeVersusIds.clear();
+        }
+    }
+
+    // ================== PERSISTENCIA LOCAL ==================
 
     private String todayKey(String prefix) { return prefix + dayCode(); }
 
@@ -223,7 +310,6 @@ public class StepsManager {
                         .putString(KEY_RECORD_DAY, dayCode())
                         .apply();
             }
-            // nuevo día
             keyBaseToday  = expectedBase;
             keyTotalToday = todayKey(KEY_TOTAL_PREFIX);
             baseOffset = -1f;
