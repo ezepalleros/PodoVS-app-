@@ -10,7 +10,6 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -93,7 +92,6 @@ public class RankingActivity extends AppCompatActivity {
     // ---------- abrir perfil desde ranking ----------
     private void openUserProfile(@NonNull String otherUid, @NonNull String displayName) {
         if (otherUid.equals(uid)) {
-            // si toca su propio nombre, muestro su perfil editable
             new ProfileFragment().show(getSupportFragmentManager(), "profile_self");
         } else {
             ProfileFragment f = ProfileFragment.newInstanceForUser(otherUid, displayName, false);
@@ -120,7 +118,6 @@ public class RankingActivity extends AppCompatActivity {
                         return;
                     }
 
-                    // Tenemos tabla activa de esta semana: arrancamos el contador
                     startWeeklyCountdown();
 
                     for (FirestoreRepo.WeeklyRankingRow row : result.rows) {
@@ -135,12 +132,7 @@ public class RankingActivity extends AppCompatActivity {
                 });
     }
 
-    /**
-     * Calcula SIEMPRE el próximo lunes a las 00:00 y hace la cuenta regresiva hasta ahí.
-     * Cuando llega a cero, recarga el ranking (lo que dispara la limpieza de semana vieja
-     * y la asignación a una tabla nueva).
-     */
-    private void startWeeklyCountdown() {
+     private void startWeeklyCountdown() {
         stopWeeklyCountdown();
 
         long now = System.currentTimeMillis();
@@ -154,7 +146,6 @@ public class RankingActivity extends AppCompatActivity {
         int dow = cal.get(Calendar.DAY_OF_WEEK);
         int daysUntilMonday = (Calendar.MONDAY - dow + 7) % 7;
         if (daysUntilMonday == 0) {
-            // si hoy ya es lunes, el próximo lunes es dentro de 7 días
             daysUntilMonday = 7;
         }
         cal.add(Calendar.DAY_OF_MONTH, daysUntilMonday);
@@ -169,7 +160,7 @@ public class RankingActivity extends AppCompatActivity {
                 if (remaining <= 0) {
                     tvWeeklySubtitle.setText("Actualizando nueva semana...");
                     stopWeeklyCountdown();
-                    loadWeeklyRanking(); // dispara limpieza + nueva tabla
+                    loadWeeklyRanking();
                     return;
                 }
 
@@ -229,7 +220,6 @@ public class RankingActivity extends AppCompatActivity {
         tvName.setTextSize(14);
         tvName.setTextColor(row.uid.equals(uid) ? 0xFFB91C1C : 0xFF111827);
 
-        // al tocar el nombre, abrir perfil de ese usuario
         tvName.setOnClickListener(v ->
                 openUserProfile(row.uid, row.nombre));
 
@@ -331,7 +321,6 @@ public class RankingActivity extends AppCompatActivity {
         tvName.setTextSize(14);
         tvName.setTextColor(0xFF111827);
 
-        // abrir perfil global
         String otherUid = snap.getId();
         String finalNombre = nombre;
         tvName.setOnClickListener(v ->

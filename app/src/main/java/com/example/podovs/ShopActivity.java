@@ -74,8 +74,7 @@ public class ShopActivity extends AppCompatActivity {
     private ViewGroup sectionChests;
     private ViewGroup sectionEvents;
 
-    // ======= Cofres =======
-    private static final int PRICE_BRONZE = 10000;   // referencia visual
+    private static final int PRICE_BRONZE = 10000;
     private static final int PRICE_SILVER = 25000;
     private static final int PRICE_GOLD   = 50000;
 
@@ -89,7 +88,6 @@ public class ShopActivity extends AppCompatActivity {
     private static final int COL_TEXT_MEDIUM  = Color.parseColor("#4B5563");
     private static final int COL_BTN_LILAC    = Color.parseColor("#8B5CF6");
     private static final int COL_BTN_DISABLED = Color.parseColor("#9CA3AF");
-    // NUEVO: verde para el cofre de anuncios cuando haya anuncio cargado
     private static final int COL_BTN_GREEN    = Color.parseColor("#22C55E");
 
     // Rotación 3h
@@ -114,8 +112,8 @@ public class ShopActivity extends AppCompatActivity {
     // ======= Ads recompensados (cofre 10k) =======
     private static final String REWARDED_AD_UNIT_ID_BRONZE =
             BuildConfig.DEBUG
-                    ? "ca-app-pub-3940256099942544/5224354917" // TEST (Rewarded)
-                    : "ca-app-pub-1198349658294342/3811853152"; // TU unidad real
+                    ? "ca-app-pub-3940256099942544/5224354917"
+                    : "ca-app-pub-1198349658294342/3811853152";
 
     private RewardedAd rewardedBronzeAd;
     private boolean isLoadingBronzeAd = false;
@@ -126,7 +124,7 @@ public class ShopActivity extends AppCompatActivity {
     private static final int MAX_BRONZE_ADS_PER_DAY = 3;
 
     private Button btnBronzeChest;
-    private TextView tvBronzePrice;   // para mostrar "10,000 (X)"
+    private TextView tvBronzePrice;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -354,7 +352,6 @@ public class ShopActivity extends AppCompatActivity {
         ImageView iv = new ImageView(this);
         iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         iv.setAdjustViewBounds(true);
-        // NUEVO: usar pixel_ad para el cofre de anuncios (10k) y pixel_chest para los demás
         int imgRes = (tier == FirestoreRepo.CHEST_T1)
                 ? R.drawable.pixel_ad
                 : R.drawable.pixel_chest;
@@ -382,14 +379,13 @@ public class ShopActivity extends AppCompatActivity {
         btn.setLayoutParams(lpBtn);
 
         if (tier == FirestoreRepo.CHEST_T1) {
-            // BRONCE: Gratis con anuncio recompensado
             tvBronzePrice = tvPrice;
             tvSub.setText("Premios de 20000");
 
             btnBronzeChest = btn;
             btn.setOnClickListener(v -> showBronzeRewardedAd());
 
-            refreshBronzeButtonState(); // actualiza texto y estado
+            refreshBronzeButtonState();
         } else {
             tvPrice.setText(String.format(Locale.getDefault(), "%,d", price));
             tvSub.setText("Premios de " + String.format(Locale.getDefault(), "%,d", poolPrice));
@@ -412,7 +408,6 @@ public class ShopActivity extends AppCompatActivity {
                 return;
             }
 
-            // Si chestPrice es 0 (cofre con anuncio), no descontamos nada
             if (chestPrice > 0) {
                 repo.addSaldo(uid, -chestPrice, v1 -> abrirCofreConPool(chestPrice, prizePrice),
                         e -> Toast.makeText(this, "Error al descontar saldo.", Toast.LENGTH_SHORT).show());
@@ -552,7 +547,6 @@ public class ShopActivity extends AppCompatActivity {
         int remaining = MAX_BRONZE_ADS_PER_DAY - used;
         if (remaining < 0) remaining = 0;
 
-        // Texto del precio como los otros, con paréntesis del resto
         if (tvBronzePrice != null) {
             String base = String.format(Locale.getDefault(), "%,d", PRICE_BRONZE);
             tvBronzePrice.setText(base + " (" + remaining + ")");
@@ -568,7 +562,6 @@ public class ShopActivity extends AppCompatActivity {
         }
 
         btnBronzeChest.setEnabled(true);
-        // NUEVO: verde solo cuando haya anuncio cargado; si no, queda lila
         if (rewardedBronzeAd != null) {
             btnBronzeChest.setBackgroundTintList(ColorStateList.valueOf(COL_BTN_GREEN));
         } else {
@@ -612,7 +605,6 @@ public class ShopActivity extends AppCompatActivity {
             public void onUserEarnedReward(RewardItem rewardItem) {
                 incrementBronzeAdsUsedToday();
                 refreshBronzeButtonState();
-                // Abrimos cofre sin gastar saldo
                 openChest(0, POOL_BRONZE);
             }
         });

@@ -78,7 +78,6 @@ public class MainActivity extends AppCompatActivity {
     private double kmSemanaCache = 0.0;
     private long lastSyncToFirestoreMillis = 0L;
 
-    // Versus activos del usuario (para empujar pasos desde el main)
     private final List<String> activeVersusIds = new ArrayList<>();
     private ListenerRegistration versusListener;
 
@@ -125,7 +124,6 @@ public class MainActivity extends AppCompatActivity {
         repo.ensureStats(uid);
         repo.normalizeXpLevel(uid, v -> {}, e -> Log.w(TAG, "normalizeXpLevel: " + e.getMessage()));
 
-        // Listener del usuario
         repo.listenUser(uid, (snap, err) -> {
             if (err != null) {
                 Log.w(TAG, "listenUser error: " + err.getMessage());
@@ -186,6 +184,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Bottom bar
         ImageButton btnHome = findViewById(R.id.btnHome);
+        ImageButton btnShop = findViewById(R.id.btnShop);
         ImageButton btnVs   = findViewById(R.id.btnVs);
         ImageButton btnEvt  = findViewById(R.id.btnEvents);
         ImageButton btnLb   = findViewById(R.id.btnLeaderboards);
@@ -193,6 +192,13 @@ public class MainActivity extends AppCompatActivity {
         if (btnHome != null) {
             btnHome.setOnClickListener(v ->
                     Toast.makeText(this, "Ya estás en inicio", Toast.LENGTH_SHORT).show());
+        }
+
+        if (btnShop != null) {
+            btnShop.setOnClickListener(v -> {
+                startActivity(new Intent(this, ShopActivity.class));
+                finish();
+            });
         }
 
         if (btnVs != null) {
@@ -222,7 +228,6 @@ public class MainActivity extends AppCompatActivity {
 
         getSupportFragmentManager().setFragmentResultListener("coins_changed", this, (requestKey, bundle) -> {});
 
-        // Listener de versus activos
         startVersusListener();
 
         requestRuntimePermissions();
@@ -251,7 +256,6 @@ public class MainActivity extends AppCompatActivity {
         if (versusListener != null) versusListener.remove();
     }
 
-    // ==== Listener de versus activos ====
     private void startVersusListener() {
         if (versusListener != null) versusListener.remove();
 
@@ -272,21 +276,17 @@ public class MainActivity extends AppCompatActivity {
     private void onStepsUpdatedMain(long stepsToday) {
         SharedPreferences sp = userPrefs();
 
-        // 1) cambio de día (record y reset de contadores locales)
         maybeRunRollover();
 
-        // 2) Guardar pasos locales + UI
         sp.edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
         tvKmTotalBig.setText(String.valueOf(stepsToday));
 
-        // 3) Actualizar VERSUS siempre que haya alguno activo (SIN throttle global)
         if (!activeVersusIds.isEmpty()) {
             for (String vsId : activeVersusIds) {
                 repo.updateVersusStepsQuiet(vsId, uid, stepsToday);
             }
         }
 
-        // 4) Throttle de 1 minuto solo para stats del usuario (km_total, km_semana, récord)
         long now = System.currentTimeMillis();
         if (now - lastSyncToFirestoreMillis < 60_000L) return;
         lastSyncToFirestoreMillis = now;
@@ -300,12 +300,10 @@ public class MainActivity extends AppCompatActivity {
         double kmDelta = deltaSteps * STEP_TO_KM;
         if (kmDelta <= 0.0) return;
 
-        // km_total / km_semana
         repo.addKmDelta(uid, kmDelta,
                 v -> {},
                 e -> Log.w(TAG, "addKmDelta delta error: " + e.getMessage()));
 
-        // récord diario
         repo.updateMayorPasosDiaIfGreater(uid, stepsToday);
     }
 

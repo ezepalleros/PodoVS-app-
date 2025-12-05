@@ -135,7 +135,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         ivAvatar.setScaleType(ImageView.ScaleType.CENTER);
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
-        // ---- uid sesión y uid del perfil ----
         myUid = requireContext()
                 .getSharedPreferences("session", Context.MODE_PRIVATE)
                 .getString("uid", null);
@@ -148,13 +147,11 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         boolean argEdit = (args == null) || args.getBoolean(ARG_EDIT, true);
         isEditable = isOwner && argEdit;
 
-        // Nombre “provisorio” si vino por args (RankingActivity)
         if (args != null) {
             String argName = args.getString(ARG_NAME, null);
             if (!TextUtils.isEmpty(argName)) tvName.setText(argName);
         }
 
-        // Si es vista de otro usuario: oculto edición
         if (!isEditable) {
             btnEdit1.setVisibility(View.GONE);
             btnEdit2.setVisibility(View.GONE);
@@ -207,7 +204,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         String k1, k2;
 
         if (isOwner) {
-            // Para mí: leo primero de SharedPreferences, después server, después default
             SharedPreferences sp = requireContext()
                     .getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
             String sp1 = sp.getString(KEY_SLOT1, null);
@@ -220,10 +216,8 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
             if (TextUtils.equals(k1, k2)) k2 = default2;
 
-            // sincronizo prefs locales con lo que efectivamente estoy usando
             sp.edit().putString(KEY_SLOT1, k1).putString(KEY_SLOT2, k2).apply();
         } else {
-            // Para otros usuarios: ignoro prefs locales, uso lo del server o defaults
             k1 = !TextUtils.isEmpty(chosen1Server) ? chosen1Server : default1;
             k2 = !TextUtils.isEmpty(chosen2Server) ? chosen2Server : default2;
             if (TextUtils.equals(k1, k2)) k2 = default2;
@@ -290,7 +284,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
                     if (slot == 1) sp.edit().putString(KEY_SLOT1, chosenKey).apply();
                     else           sp.edit().putString(KEY_SLOT2, chosenKey).apply();
 
-                    // subo a Firestore para que otros vean esta elección
                     pushChosenStatsToServer();
                     loadHeaderAndCards();
                 })
@@ -348,7 +341,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         if (!isAdded()) return;
 
         ArrayList<LayerReq> reqs = new ArrayList<>();
-        // ORDEN CORRECTO SIEMPRE
         addReq(qs, reqs, pielId);
         addReq(qs, reqs, zapasId);
         addReq(qs, reqs, pantalonId);
@@ -363,7 +355,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         loadAllDrawables(reqs, this::composeAndShow);
     }
 
-    // ---------- carga/composición ----------
     private void composeAndShow(ArrayList<Layer> layers) {
         if (!isAdded() || layers.isEmpty()) return;
 
@@ -454,7 +445,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         Layer(Drawable d, int x, int y) { drawable = d; offX = x; offY = y; }
     }
 
-    // Transparente por si algo falla
     private static class EmptyDrawable extends Drawable {
         @Override public void draw(@NonNull Canvas canvas) {}
         @Override public void setAlpha(int alpha) {}

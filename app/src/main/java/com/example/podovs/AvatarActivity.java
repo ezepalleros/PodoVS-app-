@@ -16,8 +16,8 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import android.view.View;            // <-- FALTABA
-import android.view.ViewGroup;      // <-- FALTABA
+import android.view.View;
+import android.view.ViewGroup;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
@@ -27,7 +27,7 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.WriteBatch;
-import com.google.firebase.firestore.SetOptions;   // <-- FALTABA
+import com.google.firebase.firestore.SetOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -57,10 +57,9 @@ public class AvatarActivity extends AppCompatActivity {
         TIPO_TO_USER_FIELD.put("zapatillas", "usu_equipped.usu_zapas");
     }
 
-    // Offsets por cosmético (X,Y) en px del sprite base (32x48). Negativo sube.
     private static final Map<String, int[]> OFFSETS = new HashMap<>();
     static {
-        OFFSETS.put("cos_id_7", new int[]{0, -6}); // cuernos: subir un poco
+        OFFSETS.put("cos_id_7", new int[]{0, -6});
     }
 
     @Override
@@ -115,8 +114,8 @@ public class AvatarActivity extends AppCompatActivity {
                 String id     = d.getId();
                 Map<String, Object> cache = (Map<String, Object>) d.get("myc_cache");
                 String tipo   = cache == null ? null : asString(cache.get("cos_tipo"));
-                String asset  = cache == null ? null : asString(cache.get("cos_asset"));      // drawable o url/slug
-                String aType  = cache == null ? null : asString(cache.get("cos_assetType"));  // "cloudinary" o null
+                String asset  = cache == null ? null : asString(cache.get("cos_asset"));
+                String aType  = cache == null ? null : asString(cache.get("cos_assetType"));
                 boolean eq    = Boolean.TRUE.equals(d.getBoolean("myc_equipped"));
                 all.add(new Cosmetic(id, tipo, asset, aType, eq));
             }
@@ -136,7 +135,7 @@ public class AvatarActivity extends AppCompatActivity {
                 currentTipo,
                 selectedByTipo.get(currentTipo),
                 clicked -> {
-                    selectedByTipo.put(currentTipo, clicked.id); // puede ser null
+                    selectedByTipo.put(currentTipo, clicked.id);
                     renderPreview();
                     rv.getAdapter().notifyDataSetChanged();
                 }
@@ -151,12 +150,11 @@ public class AvatarActivity extends AppCompatActivity {
         String selCab  = selectedByTipo.get("cabeza");
 
         List<LayerReq> reqs = new ArrayList<>();
-        // ORDEN CORRECTO SIEMPRE
-        addReq(reqs, selPiel);       // base
-        addReq(reqs, selZap);        // zapatillas debajo del pantalón
-        addReq(reqs, selPan);        // pantalón debajo de remera
-        addReq(reqs, selRem);        // remera
-        addReq(reqs, selCab);        // cabeza
+        addReq(reqs, selPiel);
+        addReq(reqs, selZap);
+        addReq(reqs, selPan);
+        addReq(reqs, selRem);
+        addReq(reqs, selCab);
 
         if (reqs.isEmpty()) { ivPreview.setImageDrawable(null); return; }
         loadAllDrawables(reqs, this::composeAndShow);
@@ -193,18 +191,17 @@ public class AvatarActivity extends AppCompatActivity {
     private void saveSelection() {
         WriteBatch batch = db.batch();
 
-        // 1) actualizar equipados del usuario
         Map<String, Object> upd = new HashMap<>();
         for (Map.Entry<String,String> e : selectedByTipo.entrySet()) {
             String tipo = e.getKey();
             String field = TIPO_TO_USER_FIELD.get(tipo);
-            if (field != null) upd.put(field, e.getValue()); // puede ser null
+            if (field != null) upd.put(field, e.getValue());
         }
         batch.update(db.collection("users").document(uid), upd);
 
         // 2) myc_equipped true/false por categoría
         for (String tipo : TIPO_TO_USER_FIELD.keySet()) {
-            String chosenId = selectedByTipo.get(tipo); // puede ser null
+            String chosenId = selectedByTipo.get(tipo);
             for (Cosmetic c : all) {
                 if (!tipo.equals(c.tipo)) continue;
                 boolean shouldBeTrue = (chosenId != null) && chosenId.equals(c.id);
@@ -276,9 +273,8 @@ public class AvatarActivity extends AppCompatActivity {
                               @NonNull CustomTarget<Drawable> target) {
         if (asset == null) { target.onResourceReady(new EmptyDrawable(), null); return; }
 
-        // Cloudinary slug → URL completa
         if ("cloudinary".equalsIgnoreCase(assetType)) {
-            String cloud = getString(R.string.cloudinary_cloud_name); // asegúrate de tener este string
+            String cloud = getString(R.string.cloudinary_cloud_name);
             String url = asset.startsWith("http")
                     ? asset
                     : "https://res.cloudinary.com/" + cloud + "/image/upload/" + asset + (asset.contains(".") ? "" : ".png");
@@ -286,13 +282,11 @@ public class AvatarActivity extends AppCompatActivity {
             return;
         }
 
-        // URL directa
         if (asset.startsWith("http://") || asset.startsWith("https://")) {
             Glide.with(this).asDrawable().load(asset).into(target);
             return;
         }
 
-        // Drawable local por nombre
         int resId = getResources().getIdentifier(asset, "drawable", getPackageName());
         Drawable d = (resId != 0) ? ContextCompat.getDrawable(this, resId) : null;
         target.onResourceReady(d != null ? d : new EmptyDrawable(), null);
@@ -330,8 +324,8 @@ public class AvatarActivity extends AppCompatActivity {
     private static class Cosmetic {
         final String id;
         final String tipo;
-        final String asset;      // nombre de drawable o URL/slug
-        final String assetType;  // "cloudinary" o null
+        final String asset;
+        final String assetType;
         final boolean equipped;
         Cosmetic(String id, String tipo, String asset, String assetType, boolean eq) {
             this.id=id; this.tipo=tipo; this.asset=asset; this.assetType=assetType; this.equipped=eq;

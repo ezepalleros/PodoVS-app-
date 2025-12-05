@@ -183,8 +183,6 @@ public class VersusActivity extends AppCompatActivity {
         others.clear();
         for (DocumentSnapshot d : qs.getDocuments()) {
 
-            // 🔒 IMPORTANTE: ignorar salas de EVENTO en la pantalla de VS
-            // Las salas de evento siempre tienen roo_eventId definido.
             if (d.get("roo_eventId") != null) {
                 continue;
             }
@@ -248,8 +246,6 @@ public class VersusActivity extends AppCompatActivity {
             if (!r.finished) myActive.add(r);
         }
     }
-
-    // CARGA DE DUEÑOS
 
     private void fetchOwnersForRooms() {
         HashSet<String> missing = new HashSet<>();

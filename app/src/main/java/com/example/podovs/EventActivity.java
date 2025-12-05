@@ -65,7 +65,7 @@ public class EventActivity extends AppCompatActivity {
     private EventRoom myRoom = null;
     private final List<EventRoom> otherRooms = new ArrayList<>();
 
-    // -------- Modelito simple para salas de evento --------
+    // -------- Salas de evento --------
     static class EventRoom {
         String id;
         String ownerId;
@@ -74,7 +74,6 @@ public class EventActivity extends AppCompatActivity {
         boolean finished;
         List<String> players = new ArrayList<>();
     }
-    // ------------------------------------------------------
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -131,7 +130,6 @@ public class EventActivity extends AppCompatActivity {
 
         btnEventCreateRoom.setOnClickListener(v -> createEventRoom());
 
-        // Escuchar evento activo y sus salas
         startActiveEventListener();
     }
 
@@ -148,8 +146,6 @@ public class EventActivity extends AppCompatActivity {
     private void startActiveEventListener() {
         if (eventListener != null) eventListener.remove();
 
-        // Miramos TODOS los eventos ordenados por fecha de inicio
-        // y elegimos el que está "vigente" (start <= ahora <= end).
         eventListener = db.collection("events")
                 .orderBy("ev_startAt", Query.Direction.DESCENDING)
                 .addSnapshotListener((qs, err) -> {
@@ -177,7 +173,6 @@ public class EventActivity extends AppCompatActivity {
                     }
 
                     if (active == null) {
-                        // No hay evento vigente ahora
                         showNoEvent();
                     } else {
                         handleEventDoc(active);
@@ -185,11 +180,6 @@ public class EventActivity extends AppCompatActivity {
                 });
     }
 
-    /**
-     * Dibuja la UI a partir de un documento de evento y arranca el listener de salas.
-     * Usa los campos TAL CUAL están en Firestore:
-     *  - ev_title, ev_targetSteps, ev_rewardCoins, ev_startAt, ev_endAt, ev_bossImg
-     */
     private void handleEventDoc(@NonNull DocumentSnapshot evt) {
         currentEventId = evt.getId();
 
@@ -248,14 +238,10 @@ public class EventActivity extends AppCompatActivity {
             ivEventBoss.setImageResource(R.drawable.default_avatar);
         }
 
-        // Cuando tenemos evento, escuchamos sus salas
         startRoomsListenerForEvent(currentEventId);
         updateCreateButtonState();
     }
 
-    /**
-     * Estado "sin evento" centralizado.
-     */
     private void showNoEvent() {
         currentEventId = null;
         tvEventTitle.setText("Sin evento activo");
@@ -275,10 +261,7 @@ public class EventActivity extends AppCompatActivity {
         updateCreateButtonState();
     }
 
-    // =========================================================
-    //  LISTENER DE SALAS DE EVENTO
-    // =========================================================
-    private void startRoomsListenerForEvent(@NonNull String eventId) {
+     private void startRoomsListenerForEvent(@NonNull String eventId) {
         if (roomsListener != null) roomsListener.remove();
 
         roomsListener = db.collection("rooms")
@@ -327,9 +310,6 @@ public class EventActivity extends AppCompatActivity {
         }
     }
 
-    // =========================================================
-    //  RENDER DE SALAS + BOTÓN CREAR
-    // =========================================================
     private void renderRooms() {
         containerMyEventRoom.removeAllViews();
         containerOtherEventRooms.removeAllViews();
@@ -359,9 +339,6 @@ public class EventActivity extends AppCompatActivity {
         btnEventCreateRoom.setAlpha(canCreate ? 1f : 0.5f);
     }
 
-    // =========================================================
-    //  CREAR / UNIR / SALIR DE SALA
-    // =========================================================
     private void createEventRoom() {
         if (currentEventId == null) {
             Toast.makeText(this, "No hay evento activo.", Toast.LENGTH_SHORT).show();
@@ -415,7 +392,6 @@ public class EventActivity extends AppCompatActivity {
         joinEventRoom(r, null);
     }
 
-    // Join con posible código (para privadas)
     private void joinEventRoom(@NonNull EventRoom r, @Nullable String inputCode) {
         if (currentEventId == null) {
             Toast.makeText(this, "No hay evento activo.", Toast.LENGTH_SHORT).show();
@@ -437,7 +413,6 @@ public class EventActivity extends AppCompatActivity {
                     Boolean pub = snap.getBoolean("roo_public");
                     boolean isPublic = pub == null || pub;
 
-                    // Validación de código para privadas
                     if (!isPublic) {
                         String stored = snap.getString("roo_code");
                         String normalizedStored = stored == null ? "" : stored.trim();
@@ -523,9 +498,6 @@ public class EventActivity extends AppCompatActivity {
                         Toast.makeText(this, "Error al cargar sala.", Toast.LENGTH_SHORT).show());
     }
 
-    // =========================================================
-    //  VISTAS AUXILIARES
-    // =========================================================
     private View makeSimpleText(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
@@ -682,9 +654,6 @@ public class EventActivity extends AppCompatActivity {
         builder.show();
     }
 
-    // =========================================================
-    //  HELPERS
-    // =========================================================
     private int dp(int v) {
         return (int) (v * getResources().getDisplayMetrics().density);
     }

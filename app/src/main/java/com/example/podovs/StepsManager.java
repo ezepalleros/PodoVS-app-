@@ -17,15 +17,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** Conteo de pasos local + callback de UI (sin BDD). */
 public class StepsManager {
 
     public interface Callback { void onStepsUpdated(long stepsToday, double kmHoy); }
 
     private static final String SP_NAME = "steps_prefs";
-    private static final String KEY_BASE_PREFIX   = "base_";        // yyyyMMdd
-    private static final String KEY_TOTAL_PREFIX  = "total_";       // yyyyMMdd
-    private static final String KEY_LAST_COUNTER  = "last_counter"; // float TYPE_STEP_COUNTER
+    private static final String KEY_BASE_PREFIX   = "base_";
+    private static final String KEY_TOTAL_PREFIX  = "total_";
+    private static final String KEY_LAST_COUNTER  = "last_counter";
     private static final String KEY_LAST_COUNTER_DAY = "last_counter_day";
     private static final String KEY_RECORD_STEPS  = "record_steps";
     private static final String KEY_RECORD_DAY    = "record_day";
@@ -40,7 +39,6 @@ public class StepsManager {
     private final Sensor stepCounter;
     private final Sensor stepDetector;
 
-    // Wakelock para mantener CPU despierto aunque la pantalla esté apagada
     private final PowerManager.WakeLock wakeLock;
 
     private boolean usingDetector = false;
@@ -60,7 +58,6 @@ public class StepsManager {
         stepCounter   = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) : null;
         stepDetector  = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR) : null;
 
-        // Inicializamos las keys de hoy
         keyBaseToday  = todayKey(KEY_BASE_PREFIX);
         keyTotalToday = todayKey(KEY_TOTAL_PREFIX);
 
@@ -68,7 +65,6 @@ public class StepsManager {
         baseOffset = prefs.getFloat(keyBaseToday, -1f);
         stepsToday = prefs.getLong(keyTotalToday, 0L);
 
-        // reconstruir base si ya teníamos contador acumulado guardado del mismo día
         if (baseOffset < 0f) {
             String today = dayCode();
             String lastDay = prefs.getString(KEY_LAST_COUNTER_DAY, "");
@@ -83,7 +79,6 @@ public class StepsManager {
             }
         }
 
-        // Creamos un wakelock parcial "alocado"
         PowerManager pm = (PowerManager) appCtx.getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PodoVS:StepWakeLock");
@@ -93,13 +88,11 @@ public class StepsManager {
         }
     }
 
-    // Compatibilidad con ctor legacy
     public StepsManager(Context context, Object ignoredDb, long ignoredUserId, Callback callback) {
         this(context, callback);
     }
 
     public void start() {
-        // YA loco: si ya estamos escuchando, solo emitimos
         if (listening) {
             emitUpdate();
             return;
@@ -124,7 +117,6 @@ public class StepsManager {
         }
         listening = true;
 
-        // ¡Alocado! Mantenemos CPU despierto siempre que se haya llamado a start()
         if (wakeLock != null && !wakeLock.isHeld()) {
             try {
                 wakeLock.acquire();
@@ -140,19 +132,10 @@ public class StepsManager {
     }
 
     public void stop() {
-        // Versión ALUCINADA:
-        // - NO desregistramos el listener (queremos seguir recibiendo pasos aunque la Activity pare)
-        // - NO liberamos el wakelock (queda vivo mientras el proceso viva)
-        // Solo frenamos el scheduler de callbacks periódicos para no gastar de más en UI
-
-        if (tickScheduler != null) {
+         if (tickScheduler != null) {
             tickScheduler.shutdownNow();
             tickScheduler = null;
         }
-
-        // NO tocamos sensorManager.unregisterListener(listener);
-        // NO tocamos wakeLock.release();
-        // listening queda true para que sepamos que el sensor sigue activo
     }
 
     public long getStepsToday() { return stepsToday; }
@@ -168,14 +151,13 @@ public class StepsManager {
 
     private final SensorEventListener listener = new SensorEventListener() {
         @Override public void onSensorChanged(SensorEvent event) {
-            ensureTodayKeys(); // también gestiona récord en el cambio de día
+            ensureTodayKeys();
 
             SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
 
             if (!usingDetector && event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
                 float totalSinceBoot = event.values[0];
 
-                // detectar reinicio del contador (reboot)
                 float lastCounter = prefs.getFloat(KEY_LAST_COUNTER, -1f);
                 String lastDay    = prefs.getString(KEY_LAST_COUNTER_DAY, "");
                 if (lastCounter >= 0f && totalSinceBoot < lastCounter) {
@@ -230,7 +212,6 @@ public class StepsManager {
         return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date());
     }
 
-    /** Si cambia el día, persiste récord local y resetea conteos para hoy. */
     private void ensureTodayKeys() {
         String expectedBase = todayKey(KEY_BASE_PREFIX);
         if (!expectedBase.equals(keyBaseToday)) {

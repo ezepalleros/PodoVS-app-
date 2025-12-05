@@ -43,7 +43,6 @@ public class CreatorFragment extends DialogFragment {
     public View onCreateView(@NonNull LayoutInflater inflater,
                              @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        // OJO: usamos fragment_creator, dialog_create_room NO existe.
         return inflater.inflate(R.layout.fragment_creator, container, false);
     }
 
@@ -64,12 +63,10 @@ public class CreatorFragment extends DialogFragment {
         MaterialButton btnCreate = view.findViewById(R.id.btnCreateRoomConfirm);
         View btnClose = view.findViewById(R.id.btnCloseDialog);
 
-        // cerrar tocando afuera
         if (rootOverlay != null) {
             rootOverlay.setOnClickListener(v -> dismiss());
         }
         if (card != null) {
-            // consumir el click para que no se cierre al tocar dentro
             card.setOnClickListener(v -> {});
         }
 

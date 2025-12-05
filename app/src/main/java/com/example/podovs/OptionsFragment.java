@@ -38,7 +38,6 @@ public class OptionsFragment extends Fragment {
     private int resetClicks = 0;
 
     public OptionsFragment() {
-        // Required empty public constructor
     }
 
     @Override
@@ -51,7 +50,6 @@ public class OptionsFragment extends Fragment {
         uid = sp.getString("uid", null);
 
         if (uid == null || uid.isEmpty()) {
-            // sin sesión -> mandar a login
             startActivity(new Intent(ctx, LoginActivity.class));
             requireActivity().finish();
         }
@@ -78,9 +76,8 @@ public class OptionsFragment extends Fragment {
         btnLogout        = view.findViewById(R.id.btnLogout);
         btnClose         = view.findViewById(R.id.btnClose);
 
-        // Colores ya vienen desde el XML; solo seteamos listeners
         loadCurrentData();
-        updateResetHint(); // "Tocá 3 veces..."
+        updateResetHint();
 
         btnDifBajo.setOnClickListener(v -> changeDifficulty("bajo"));
         btnDifMedio.setOnClickListener(v -> changeDifficulty("medio"));
@@ -136,7 +133,6 @@ public class OptionsFragment extends Fragment {
     }
 
     private void styleSelectedDifficulty(String dif) {
-        // resaltamos el botón seleccionado
         btnDifBajo.setAlpha(0.7f);
         btnDifMedio.setAlpha(0.7f);
         btnDifAlto.setAlpha(0.7f);
@@ -178,9 +174,8 @@ public class OptionsFragment extends Fragment {
             return;
         }
 
-        // disparar reset
         resetClicks = 0;
-        updateResetHint(); // "Reiniciando nivel y metas..."
+        updateResetHint();
 
         if (uid == null) return;
         repo.resetLevelAndGoals(uid,
@@ -193,10 +188,8 @@ public class OptionsFragment extends Fragment {
 
     private void logout() {
         Context ctx = requireContext();
-        // Cerrar sesión Firebase
         FirebaseAuth.getInstance().signOut();
 
-        // Limpiar session prefs
         SharedPreferences sp = ctx.getSharedPreferences("session", Context.MODE_PRIVATE);
         sp.edit().clear().apply();
 

@@ -85,7 +85,7 @@ public class VsInfoFragment extends DialogFragment {
         View btnCloseIcon = view.findViewById(R.id.btnCloseIcon);
 
         rootOverlay.setOnClickListener(v -> dismiss());
-        card.setOnClickListener(v -> { }); // para que los clicks no cierren
+        card.setOnClickListener(v -> { });
         btnClose.setOnClickListener(v -> dismiss());
         btnCloseIcon.setOnClickListener(v -> dismiss());
 
@@ -176,7 +176,6 @@ public class VsInfoFragment extends DialogFragment {
         Object progressRaw = snap.get("ver_progress");
         Map<String, Map<String, Object>> progress = null;
         if (progressRaw instanceof Map) {
-            //noinspection unchecked
             progress = (Map<String, Map<String, Object>>) progressRaw;
         }
         if (progress == null) progress = new HashMap<>();
@@ -235,9 +234,6 @@ public class VsInfoFragment extends DialogFragment {
 
         row.addView(tvLine);
         row.addView(pb);
-
-        // opcional: se podría pedir nombre real al doc de users, pero para no
-        // enredar la UI lo dejamos sólo con el handle corto.
 
         return row;
     }

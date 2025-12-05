@@ -36,9 +36,8 @@ public class RegisterActivity extends AppCompatActivity {
     private static final int COL_MEDIUM = 0xFFFFC107;
     private static final int COL_HARD   = 0xFFF44336;
 
-    private String onboardingUid = null; // si viene desde Login (no existe doc)
+    private String onboardingUid = null;
 
-    // Prefs usados por MainActivity (mismo esquema)
     private static final String PREFS_GLOBAL = "podovs_global";
     private static final String KEY_LAST_UID = "last_uid";
     private static final String PREFS_PREFIX = "podovs_prefs_";
@@ -64,7 +63,6 @@ public class RegisterActivity extends AppCompatActivity {
 
         repo = new FirestoreRepo();
 
-        // Modo Onboarding (sin crear Auth; solo perfil Firestore para uid existente)
         onboardingUid = getIntent().getStringExtra("onboarding_uid");
         if (onboardingUid != null) {
             etEmail.setEnabled(false);
@@ -139,7 +137,6 @@ public class RegisterActivity extends AppCompatActivity {
         btnCrearCuenta.setEnabled(false);
 
         if (onboardingUid != null) {
-            // Solo inicializa perfil para uid ya logueado
             repo.initUserProfile(onboardingUid, nombre, dif,
                     v -> repo.addStarterPackIfMissing(
                             onboardingUid,
@@ -161,7 +158,6 @@ public class RegisterActivity extends AppCompatActivity {
                 Toast.makeText(this, "Completá email y contraseña.", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // Crea cuenta y luego perfil + starter pack
             repo.createUser(email, pass,
                     (AuthResult r) -> {
                         String uid = (r.getUser() != null) ? r.getUser().getUid() : null;
@@ -194,7 +190,6 @@ public class RegisterActivity extends AppCompatActivity {
         }
     }
 
-    // --- Prefs locales para aislar pasos por usuario (coincide con MainActivity) ---
     private void initLocalPrefsFor(String uid) {
         getSharedPreferences(PREFS_GLOBAL, MODE_PRIVATE)
                 .edit().putString(KEY_LAST_UID, uid).apply();

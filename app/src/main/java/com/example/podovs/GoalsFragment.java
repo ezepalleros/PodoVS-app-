@@ -117,7 +117,6 @@ public class GoalsFragment extends DialogFragment {
             long stepsWeekRaw = Math.max(0L,
                     Math.round((kmSemana * 1000.0) / METROS_POR_PASO));
 
-            // ventana semanal para habilitar reclamo
             long weekStart = getNestedLong(snap, "usu_stats.week_started_at",
                     System.currentTimeMillis());
             long msElapsed = System.currentTimeMillis() - weekStart;
@@ -394,7 +393,6 @@ public class GoalsFragment extends DialogFragment {
         return Math.max(0L, end - now);
     }
 
-    /** Devuelve "3d 7h", "7h 05m" o "10 min". */
     private String formatDuration(long ms) {
         if (ms <= 0) return "0 min";
         long totalMinutes = ms / (60L * 1000L);
