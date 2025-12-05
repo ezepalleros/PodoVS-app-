@@ -45,6 +45,9 @@ public class FirestoreRepo {
 
     public static final int MAX_ACTIVE_VERSUS = 3;
 
+    // Recompensa base por ganar un VS (la fórmula usa pasos / meta, esto solo es por si necesitás algo fijo)
+    private static final long VS_WIN_COINS_BASE = 0L;
+
     private static final String[] STARTER_IDS = {
             "cos_id_1","cos_id_2","cos_id_3","cos_id_4","cos_id_5","cos_id_6","cos_id_7",
             "cos_id_13","cos_id_14","cos_id_15"
@@ -266,6 +269,11 @@ public class FirestoreRepo {
             tr.update(ref, "usu_stats.km_total", nuevoTot);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
+    }
+
+    private String todayCode() {
+        return new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+                .format(new java.util.Date());
     }
 
     public void addKmDelta(@NonNull String uid, double kmDelta,
@@ -1032,6 +1040,7 @@ public class FirestoreRepo {
             vsData.put("ver_days", room.get("roo_days"));
             vsData.put("ver_createdAt", FieldValue.serverTimestamp());
             vsData.put("ver_finished", false);
+            String todayCode = todayCode();
 
             Map<String,Object> progress = new HashMap<>();
             for (String pUid : vsPlayers) {
@@ -1040,6 +1049,7 @@ public class FirestoreRepo {
                 p.put("deviceTotal", 0L);
                 p.put("joinedAt", FieldValue.serverTimestamp());
                 p.put("lastUpdate", FieldValue.serverTimestamp());
+                p.put("dayCode", todayCode);
                 progress.put(pUid, p);
             }
             vsData.put("ver_progress", progress);
@@ -1055,197 +1065,199 @@ public class FirestoreRepo {
     }
 
     // ---------- PROGRESO DE VERSUS / GANADOR + RECOMPENSAS ----------
-    /**
-     * stepsToday debe ser el TOTAL de pasos del día actual que devuelve la API
-     * (no el delta). Este método calcula el delta de forma segura, lo suma al
-     * progreso del versus y, si corresponde, marca ganador y reparte recompensas.
-     */
-    public void updateVersusSteps(@NonNull String versusId,
-                                  @NonNull String uid,
-                                  long stepsToday,
-                                  @NonNull OnSuccessListener<Void> ok,
-                                  @NonNull OnFailureListener err) {
 
-        final long stepsTotal = Math.max(0L, stepsToday);
+    void updateVersusSteps(@NonNull String versusId,
+                           @NonNull String uid,
+                           long stepsToday,
+                           @NonNull OnSuccessListener<Void> ok,
+                           @NonNull OnFailureListener er) {
+
         final DocumentReference vsRef = versusDoc(versusId);
+        final String todayCode = todayCode(); // yyyyMMdd del día actual
 
-        db.runTransaction((Transaction.Function<Void>) tr -> {
-            DocumentSnapshot vs = tr.get(vsRef);
+        db.runTransaction((Transaction.Function<Void>) transaction -> {
+                    DocumentSnapshot snap = transaction.get(vsRef);
+                    if (!snap.exists()) return null;
 
-            if (!vs.exists()) {
-                throw new IllegalStateException("La partida ya no existe.");
-            }
+                    // Leer progreso previo de este jugador
+                    Object raw = snap.get("ver_progress." + uid);
+                    long prevDevice = 0L;
+                    long prevSteps  = 0L;
+                    String prevDay  = null;
 
-            Boolean finishedB = vs.getBoolean("ver_finished");
-            if (finishedB != null && finishedB) {
-                // ya finalizada, no tocar nada
-                return null;
-            }
+                    if (raw instanceof Map) {
+                        Map<?,?> m = (Map<?,?>) raw;
+                        Object dv = m.get("deviceTotal");
+                        Object st = m.get("steps");
+                        Object dy = m.get("dayCode");
 
-            Object progRaw = vs.get("ver_progress");
-            if (!(progRaw instanceof Map)) {
-                throw new IllegalStateException("Datos de progreso inválidos.");
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, Object> progMap = new HashMap<>((Map<String, Object>) progRaw);
+                        if (dv instanceof Number) prevDevice = ((Number) dv).longValue();
+                        if (st instanceof Number) prevSteps  = ((Number) st).longValue();
+                        if (dy instanceof String) prevDay    = (String) dy;
+                    }
 
-            Object userProgRaw = progMap.get(uid);
-            if (!(userProgRaw instanceof Map)) {
-                throw new IllegalStateException("No estás en esta partida.");
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, Object> userProg = new HashMap<>((Map<String, Object>) userProgRaw);
+                    // Calcular incremento (reseteo por cambio de día)
+                    long inc;
+                    if (prevDay == null || !todayCode.equals(prevDay)) {
+                        inc = stepsToday;
+                    } else {
+                        inc = stepsToday - prevDevice;
+                    }
+                    if (inc < 0L) inc = 0L;
 
-            // pasos acumulados actualmente en el versus para este jugador
-            long storedSteps = stepsFromProg(progMap, uid);
+                    long newSteps = prevSteps + inc;
+                    long now = System.currentTimeMillis();
 
-            // último total de pasos de dispositivo que guardamos
-            Long lastDeviceTotal = null;
-            Object devObj = userProg.get("deviceTotal");
-            if (devObj instanceof Number) {
-                lastDeviceTotal = ((Number) devObj).longValue();
-            }
+                    Map<String, Object> updates = new HashMap<>();
+                    updates.put("ver_progress." + uid + ".steps",       newSteps);
+                    updates.put("ver_progress." + uid + ".deviceTotal", stepsToday);
+                    updates.put("ver_progress." + uid + ".lastUpdate",  now);
+                    updates.put("ver_progress." + uid + ".dayCode",     todayCode);
 
-            long delta;
-            if (lastDeviceTotal == null) {
-                // primera vez: contamos todo lo del día
-                delta = stepsTotal;
-            } else if (stepsTotal >= lastDeviceTotal) {
-                // contador subió normal
-                delta = stepsTotal - lastDeviceTotal;
-            } else {
-                // contador se reseteó (medianoche/reinicio)
-                delta = stepsTotal;
-            }
+                    // ¿ya estaba terminado?
+                    Boolean finishedFlag = snap.getBoolean("ver_finished");
+                    boolean alreadyFinished = finishedFlag != null && finishedFlag;
+                    if (alreadyFinished) {
+                        transaction.update(vsRef, updates);
+                        return null;
+                    }
 
-            if (delta < 0L) delta = 0L;
+                    // Datos generales del versus
+                    boolean isRace = Boolean.TRUE.equals(snap.getBoolean("ver_type"));
 
-            long newStoredSteps = storedSteps + delta;
-            if (newStoredSteps < 0L) newStoredSteps = 0L;
+                    long targetSteps = 0L;
+                    Object tObj = snap.get("ver_targetSteps");
+                    if (tObj instanceof Number) targetSteps = ((Number) tObj).longValue();
 
-            long now = System.currentTimeMillis();
+                    long days = 0L;
+                    Object dObj = snap.get("ver_days");
+                    if (dObj instanceof Number) days = ((Number) dObj).longValue();
 
-            Map<String,Object> updates = new HashMap<>();
-            updates.put("ver_progress." + uid + ".steps", newStoredSteps);
-            updates.put("ver_progress." + uid + ".deviceTotal", stepsTotal);
-            updates.put("ver_progress." + uid + ".lastUpdate", now);
+                    long createdAtMs = 0L;
+                    Object cObj = snap.get("ver_createdAt");
+                    if (cObj instanceof Timestamp) {
+                        createdAtMs = ((Timestamp) cObj).toDate().getTime();
+                    } else if (cObj instanceof Number) {
+                        createdAtMs = ((Number) cObj).longValue();
+                    }
 
-            // snapshot de pasos acumulados de todos para usar después (ganador / recompensas)
-            Map<String,Long> stepsSnapshot = new HashMap<>();
-            for (String pid : progMap.keySet()) {
-                if (pid.equals(uid)) {
-                    stepsSnapshot.put(pid, newStoredSteps);
-                } else {
-                    stepsSnapshot.put(pid, stepsFromProg(progMap, pid));
-                }
-            }
+                    // Jugadores
+                    List<String> players = new ArrayList<>();
+                    Object rawPlayers = snap.get("ver_players");
+                    if (rawPlayers instanceof List) {
+                        for (Object o : (List<?>) rawPlayers) {
+                            if (o instanceof String) players.add((String) o);
+                        }
+                    }
 
-            boolean isRace = Boolean.TRUE.equals(vs.getBoolean("ver_type"));
-            Long targetL = vs.getLong("ver_targetSteps");
-            long targetSteps = targetL != null ? targetL : 0L;
-            Long daysL = vs.getLong("ver_days");
-            long days = daysL != null ? 0L : 0L;
-            if (daysL != null) days = daysL;
+                    // Mapa de progreso de todos
+                    Map<String,Object> progMap = null;
+                    Object progObj = snap.get("ver_progress");
+                    if (progObj instanceof Map) {
+                        //noinspection unchecked
+                        progMap = (Map<String, Object>) progObj;
+                    }
 
-            boolean shouldFinish = false;
-            String winnerUid = null;
-            long winnerSteps = 0L;
+                    boolean closeNow = false;
+                    String winnerUid = null;
+                    String loserUid  = null;
 
-            if (isRace && targetSteps > 0 && newStoredSteps >= targetSteps) {
-                // Carrera: el que llega primero a la meta gana
-                shouldFinish = true;
-                winnerUid = uid;
-                winnerSteps = newStoredSteps;
-            } else if (!isRace && days > 0) {
-                // Maratón: verificar si ya terminó el periodo
-                Timestamp createdTs = vs.getTimestamp("ver_createdAt");
-                if (createdTs != null) {
-                    long endMs = createdTs.toDate().getTime()
-                            + days * 24L * 60L * 60L * 1000L;
-                    if (now >= endMs) {
-                        shouldFinish = true;
+                    if (isRace) {
+                        // Carrera: termina cuando alguien alcanza la meta
+                        if (targetSteps > 0L && newSteps >= targetSteps) {
+                            closeNow = true;
+                            winnerUid = uid;
 
-                        // buscar el jugador con más pasos acumulados
-                        for (Map.Entry<String,Long> e : stepsSnapshot.entrySet()) {
-                            String pid = e.getKey();
-                            Long stL = e.getValue();
-                            long st = stL == null ? 0L : stL;
-                            if (winnerUid == null || st > winnerSteps) {
-                                winnerUid = pid;
-                                winnerSteps = st;
+                            if (players.size() >= 2) {
+                                for (String p : players) {
+                                    if (!p.equals(uid)) {
+                                        loserUid = p;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Maratón: termina por tiempo (ver_days)
+                        if (days > 0L && createdAtMs > 0L) {
+                            long limitMs = createdAtMs + days * 24L * 60L * 60L * 1000L;
+                            if (now >= limitMs) {
+                                if (players.size() == 1) {
+                                    winnerUid = players.get(0);
+                                    closeNow = true;
+                                } else if (players.size() >= 2) {
+                                    String p0 = players.get(0);
+                                    String p1 = players.get(1);
+
+                                    long s0 = p0.equals(uid) ? newSteps : stepsFromProg(progMap, p0);
+                                    long s1 = p1.equals(uid) ? newSteps : stepsFromProg(progMap, p1);
+
+                                    // En empate gana el primero (p0) para no dejar el VS colgado
+                                    if (s0 >= s1) {
+                                        winnerUid = p0;
+                                        loserUid = p1;
+                                    } else {
+                                        winnerUid = p1;
+                                        loserUid = p0;
+                                    }
+                                    closeNow = true;
+                                }
                             }
                         }
                     }
-                }
-            }
 
-            if (shouldFinish) {
-                updates.put("ver_finished", true);
-                updates.put("ver_finishedAt", now);
-                if (winnerUid != null) {
-                    updates.put("ver_winnerUid", winnerUid);
-                    updates.put("ver_winnerSteps", winnerSteps);
-                }
+                    if (closeNow && winnerUid != null) {
+                        updates.put("ver_finished", true);
+                        updates.put("ver_finishedAt", now);
+                        updates.put("ver_winner", winnerUid);
 
-                // aplicamos update al doc de versus
-                tr.update(vsRef, updates);
-
-                // calcular recompensas
-                List<String> players = new ArrayList<>();
-                Object playersRaw = vs.get("ver_players");
-                if (playersRaw instanceof List) {
-                    for (Object o : (List<?>) playersRaw) {
-                        if (o instanceof String) players.add((String) o);
-                    }
-                }
-
-                if (!players.isEmpty()) {
-                    for (String pid : players) {
-                        Long stL = stepsSnapshot.get(pid);
-                        long st = stL == null ? 0L : stL;
-                        if (st < 0) st = 0;
-
-                        long coins;
-                        if (winnerUid != null) {
-                            if (pid.equals(winnerUid)) {
-                                // ganador: doble de sus pasos
-                                coins = st * 2L;
-                            } else {
-                                // perdedor: mitad de sus pasos
-                                coins = st / 2L;
-                            }
+                        // ---- Recompensas ----
+                        // Ganador
+                        long winnerSteps = winnerUid.equals(uid) ? newSteps : stepsFromProg(progMap, winnerUid);
+                        long winnerBase;
+                        if (isRace && targetSteps > 0L) {
+                            // Para carrera: se usa la meta o los pasos, lo que corresponda (en práctica: meta)
+                            winnerBase = Math.max(winnerSteps, targetSteps);
                         } else {
-                            // empate (sin ganador): todos reciben mitad de sus pasos
-                            coins = st / 2L;
+                            // Para maratón: se usa lo que caminó
+                            winnerBase = winnerSteps;
                         }
+                        long winnerCoins = winnerBase * 2L + VS_WIN_COINS_BASE;
 
-                        if (coins > 0) {
-                            tr.update(userDoc(pid),
-                                    "usu_saldo", FieldValue.increment(coins));
-                        }
+                        Map<String,Object> winUp = new HashMap<>();
+                        winUp.put("usu_saldo", FieldValue.increment(winnerCoins));
+                        winUp.put("usu_stats.carreras_ganadas", FieldValue.increment(1));
+                        transaction.update(userDoc(winnerUid), winUp);
 
-                        // carreras_ganadas +1 solo para el ganador
-                        if (winnerUid != null && pid.equals(winnerUid)) {
-                            tr.update(userDoc(pid),
-                                    "usu_stats.carreras_ganadas", FieldValue.increment(1));
+                        // Perdedor
+                        if (loserUid != null) {
+                            long loserSteps = loserUid.equals(uid) ? newSteps : stepsFromProg(progMap, loserUid);
+                            long loserCoins = loserSteps / 2L;
+                            if (loserCoins > 0L) {
+                                transaction.update(userDoc(loserUid),
+                                        "usu_saldo", FieldValue.increment(loserCoins));
+                            }
                         }
                     }
-                }
 
-            } else {
-                // solo actualiza progreso, no termina el match
-                tr.update(vsRef, updates);
-            }
-
-            return null;
-        }).addOnSuccessListener(ok).addOnFailureListener(err);
+                    transaction.update(vsRef, updates);
+                    return null;
+                })
+                .addOnSuccessListener(ok)
+                .addOnFailureListener(er);
     }
 
-    /** Versión silenciosa para usar desde UI cuando no hace falta manejar callbacks. */
-    public void updateVersusStepsQuiet(@NonNull String versusId,
-                                       @NonNull String uid,
-                                       long stepsToday) {
-        updateVersusSteps(versusId, uid, stepsToday, v -> {}, e -> {});
+    void updateVersusStepsQuiet(@NonNull String versusId,
+                                @NonNull String uid,
+                                long stepsToday) {
+
+        updateVersusSteps(
+                versusId,
+                uid,
+                stepsToday,
+                v -> { /* OK silencioso */ },
+                e -> { /* ERROR silencioso, si querés loguear algo acá */ }
+        );
     }
 
     // ========= RANKINGS SEMANALES =========

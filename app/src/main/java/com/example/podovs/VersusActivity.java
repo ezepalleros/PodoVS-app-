@@ -57,14 +57,8 @@ public class VersusActivity extends AppCompatActivity {
     private ListenerRegistration roomsListener;
     private ListenerRegistration versusListener;
 
-    // --- Steps / sincronización con versus ---
-    private StepsManager stepsManager;
-    private long lastSyncMillis = 0L;
-    private long lastSyncedSteps = -1L;
-
     private final List<VsRoom> myActive = new ArrayList<>();
     private final List<VsRoom> others   = new ArrayList<>();
-
     private final Map<String, OwnerInfo> ownersCache = new HashMap<>();
 
     static class VsRoom {
@@ -133,8 +127,10 @@ public class VersusActivity extends AppCompatActivity {
             startActivity(new Intent(this, VersusActivity.class));
             finish();
         });
-        btnEvt.setOnClickListener(v ->
-                Toast.makeText(this, "Eventos próximamente", Toast.LENGTH_SHORT).show());
+        btnEvt.setOnClickListener(v -> {
+            startActivity(new Intent(this, EventActivity.class));
+            finish();
+        });
         btnLb.setOnClickListener(v -> {
             startActivity(new Intent(this, RankingActivity.class));
             finish();
@@ -145,26 +141,8 @@ public class VersusActivity extends AppCompatActivity {
             frag.show(getSupportFragmentManager(), "creator_room");
         });
 
-        // --- StepsManager: recibe pasos totales del día y sincroniza a las partidas activas ---
-        stepsManager = new StepsManager(
-                this,
-                (stepsToday, kmHoy) -> onStepsUpdatedInternal(stepsToday, kmHoy)
-        );
-
         startVersusListener();
         startRoomsListener();
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (stepsManager != null) stepsManager.start();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (stepsManager != null) stepsManager.stop();
     }
 
     @Override
@@ -172,26 +150,6 @@ public class VersusActivity extends AppCompatActivity {
         super.onDestroy();
         if (roomsListener != null) roomsListener.remove();
         if (versusListener != null) versusListener.remove();
-    }
-
-    // ---------- SYNC DE PASOS A FIRESTORE / VERSUS ----------
-
-    private void onStepsUpdatedInternal(long stepsToday, double kmHoy) {
-        if (myActive.isEmpty()) return;
-
-        long now = System.currentTimeMillis();
-
-        // Máx una sync por minuto y solo si cambiaron los pasos
-        if (stepsToday == lastSyncedSteps && now - lastSyncMillis < 60_000L) return;
-        if (now - lastSyncMillis < 60_000L) return;
-
-        lastSyncedSteps = stepsToday;
-        lastSyncMillis = now;
-
-        // FirestoreRepo.updateVersusSteps espera stepsToday = TOTAL diario del dispositivo
-        for (VsRoom r : myActive) {
-            repo.updateVersusStepsQuiet(r.id, uid, stepsToday);
-        }
     }
 
     // LISTENERS
@@ -224,6 +182,13 @@ public class VersusActivity extends AppCompatActivity {
     private void rebuildRoomsFromSnapshot(QuerySnapshot qs) {
         others.clear();
         for (DocumentSnapshot d : qs.getDocuments()) {
+
+            // 🔒 IMPORTANTE: ignorar salas de EVENTO en la pantalla de VS
+            // Las salas de evento siempre tienen roo_eventId definido.
+            if (d.get("roo_eventId") != null) {
+                continue;
+            }
+
             VsRoom r = new VsRoom();
             r.id = d.getId();
             r.ownerId = asString(d.get("roo_user"));
@@ -379,8 +344,8 @@ public class VersusActivity extends AppCompatActivity {
     }
 
     private void updateEnergyIcons(int remaining) {
-        int full  = R.drawable.energy_empty;     // disponible
-        int spent = R.drawable.energy_charged;   // gastado
+        int full  = R.drawable.energy_empty;
+        int spent = R.drawable.energy_charged;
 
         ImageView[] arr = {ivEnergy1, ivEnergy2, ivEnergy3};
         for (int i = 0; i < arr.length; i++) {

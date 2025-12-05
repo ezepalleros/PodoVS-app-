@@ -84,10 +84,9 @@ public class RankingActivity extends AppCompatActivity {
             startActivity(new Intent(this, VersusActivity.class));
             finish();
         });
-        btnEvt.setOnClickListener(v ->
-                Toast.makeText(this, "Eventos próximamente", Toast.LENGTH_SHORT).show());
-        btnLb.setOnClickListener(v -> {
-            // ya estamos acá, no hacemos nada
+        btnEvt.setOnClickListener(v -> {
+            startActivity(new Intent(this, EventActivity.class));
+            finish();
         });
     }
 

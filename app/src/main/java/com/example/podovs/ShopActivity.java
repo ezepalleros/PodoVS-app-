@@ -183,15 +183,13 @@ public class ShopActivity extends AppCompatActivity {
         btnShop.setOnClickListener(v ->
                 Toast.makeText(this, "Estás en la tienda", Toast.LENGTH_SHORT).show());
 
-        // AHORA: ir directo a VersusActivity
         btnVs.setOnClickListener(v -> {
             startActivity(new Intent(this, VersusActivity.class));
             finish();
         });
 
-        btnEvt.setOnClickListener(v -> safeNavigate("com.example.podovs.EventsActivity", "Eventos próximamente"));
-        btnLb.setOnClickListener(v -> {
-            startActivity(new Intent(this, RankingActivity.class));
+        btnEvt.setOnClickListener(v -> {
+            startActivity(new Intent(this, EventActivity.class));
             finish();
         });
 

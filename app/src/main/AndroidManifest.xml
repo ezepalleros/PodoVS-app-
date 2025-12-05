@@ -72,6 +72,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".EventActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".RankingActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

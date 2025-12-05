@@ -27,12 +27,14 @@ import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.QuerySnapshot;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -64,14 +66,21 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_DIAS_CONTADOS = "dias_contados";
     private static final String KEY_FIRST_LOGIN_DONE = "first_login_done";
 
-    // notificaciones
     private static final String KEY_LAST_LEVEL = "last_seen_level";
-    private static final String KEY_NOTIF_DAILY_PREFIX = "notif_daily_";   // + yyyymmdd
-    private static final String KEY_NOTIF_WEEKLY_PREFIX = "notif_week_";   // + cycle string
+    private static final String KEY_NOTIF_DAILY_PREFIX = "notif_daily_";
+    private static final String KEY_NOTIF_WEEKLY_PREFIX = "notif_week_";
+
+    // pasos ya sincronizados para km_total/km_semana
+    private static final String KEY_SYNCED_STEPS_TODAY = "synced_steps_today";
 
     private SharedPreferences userPrefs() { return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE); }
 
     private double kmSemanaCache = 0.0;
+    private long lastSyncToFirestoreMillis = 0L;
+
+    // Versus activos del usuario (para empujar pasos desde el main)
+    private final List<String> activeVersusIds = new ArrayList<>();
+    private ListenerRegistration versusListener;
 
     private final ActivityResultLauncher<String[]> permsLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
@@ -116,6 +125,7 @@ public class MainActivity extends AppCompatActivity {
         repo.ensureStats(uid);
         repo.normalizeXpLevel(uid, v -> {}, e -> Log.w(TAG, "normalizeXpLevel: " + e.getMessage()));
 
+        // Listener del usuario
         repo.listenUser(uid, (snap, err) -> {
             if (err != null) {
                 Log.w(TAG, "listenUser error: " + err.getMessage());
@@ -123,12 +133,13 @@ public class MainActivity extends AppCompatActivity {
             }
             if (snap != null && snap.exists()) {
                 Long saldo = snap.getLong("usu_saldo");
-                if (saldo != null && tvCoins != null) tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
+                if (saldo != null && tvCoins != null)
+                    tvCoins.setText(String.format(Locale.getDefault(), "%,d", saldo));
 
                 Double kmSemana = getNestedDouble(snap, "usu_stats.km_semana");
                 if (kmSemana != null) kmSemanaCache = kmSemana;
 
-                // -------- notificaciones: level up --------
+                // level up
                 int newLevel = (snap.getLong("usu_nivel") == null) ? 1 : snap.getLong("usu_nivel").intValue();
                 int lastLevel = userPrefs().getInt(KEY_LAST_LEVEL, 1);
                 if (newLevel > lastLevel) {
@@ -138,12 +149,12 @@ public class MainActivity extends AppCompatActivity {
                     userPrefs().edit().putInt(KEY_LAST_LEVEL, newLevel).apply();
                 }
 
-                // -------- notificaciones: metas disponibles --------
+                // metas
                 long metaDaily  = (snap.getLong("usu_stats.meta_diaria_pasos")  == null) ? 8000L  : snap.getLong("usu_stats.meta_diaria_pasos");
                 long metaWeekly = (snap.getLong("usu_stats.meta_semanal_pasos") == null) ? 56000L : snap.getLong("usu_stats.meta_semanal_pasos");
 
-                long stepsToday = userPrefs().getLong(KEY_PASOS_HOY, 0L);
-                if (stepsToday >= metaDaily) {
+                long stepsTodayLocal = userPrefs().getLong(KEY_PASOS_HOY, 0L);
+                if (stepsTodayLocal >= metaDaily) {
                     String todayKey = todayYMD();
                     if (!userPrefs().getBoolean(KEY_NOTIF_DAILY_PREFIX + todayKey, false)) {
                         NotificationHelper.showGoalClaimAvailable(this, "diaria");
@@ -154,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
                 long weekStart = (snap.getLong("usu_stats.week_started_at") == null) ? System.currentTimeMillis() : snap.getLong("usu_stats.week_started_at");
                 boolean windowReady = System.currentTimeMillis() - weekStart >= 7L * 24L * 60L * 60L * 1000L;
 
-                long stepsWeek = (long) Math.max(0, Math.round((kmSemanaCache * 1000.0) / 0.78)); // ≈ pasos
+                long stepsWeek = (long) Math.max(0, Math.round((kmSemanaCache * 1000.0) / 0.78));
                 if (windowReady && stepsWeek >= metaWeekly) {
                     String cycle = weeklyCycleString(weekStart);
                     if (!userPrefs().getBoolean(KEY_NOTIF_WEEKLY_PREFIX + cycle, false)) {
@@ -170,22 +181,10 @@ public class MainActivity extends AppCompatActivity {
         long pasosGuardados = userPrefs().getLong(KEY_PASOS_HOY, 0L);
         tvKmTotalBig.setText(String.valueOf(pasosGuardados));
 
-        stepsManager = new StepsManager(this, null, 0L, (stepsToday, kmHoy) -> {
-            userPrefs().edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
-            tvKmTotalBig.setText(String.valueOf(stepsToday));
-        });
+        stepsManager = new StepsManager(this, null, 0L,
+                (stepsToday, kmHoy) -> onStepsUpdatedMain(stepsToday));
 
-        findViewById(R.id.btnTopGoals).setOnClickListener(v -> openGoalsFragment());
-        findViewById(R.id.btnTopStats).setOnClickListener(v -> openStatsFragment());
-        findViewById(R.id.btnTopProfile).setOnClickListener(v -> openProfileSheet());
-        findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
-        findViewById(R.id.btnTopOptions).setOnClickListener(v -> openOptionsFragment());
-
-        // Botón (tarjeta) de tienda en el main
-        findViewById(R.id.btnShop).setOnClickListener(v ->
-                startActivity(new Intent(MainActivity.this, ShopActivity.class)));
-
-        // === Bottom bar: navegación a Versus y otros ===
+        // Bottom bar
         ImageButton btnHome = findViewById(R.id.btnHome);
         ImageButton btnVs   = findViewById(R.id.btnVs);
         ImageButton btnEvt  = findViewById(R.id.btnEvents);
@@ -204,8 +203,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (btnEvt != null) {
-            btnEvt.setOnClickListener(v ->
-                    Toast.makeText(this, "Eventos próximamente", Toast.LENGTH_SHORT).show());
+            btnEvt.setOnClickListener(v -> {
+                startActivity(new Intent(this, EventActivity.class));
+                finish();
+            });
         }
 
         btnLb.setOnClickListener(v -> {
@@ -213,7 +214,16 @@ public class MainActivity extends AppCompatActivity {
             finish();
         });
 
+        findViewById(R.id.btnTopGoals).setOnClickListener(v -> openGoalsFragment());
+        findViewById(R.id.btnTopStats).setOnClickListener(v -> openStatsFragment());
+        findViewById(R.id.btnTopProfile).setOnClickListener(v -> openProfileSheet());
+        findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
+        findViewById(R.id.btnTopOptions).setOnClickListener(v -> openOptionsFragment());
+
         getSupportFragmentManager().setFragmentResultListener("coins_changed", this, (requestKey, bundle) -> {});
+
+        // Listener de versus activos
+        startVersusListener();
 
         requestRuntimePermissions();
 
@@ -232,12 +242,71 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onPause() {
         super.onPause();
-        secureStopSteps();
+        secureStopSteps();  // solo apaga el scheduler, no el sensor
     }
 
     @Override protected void onDestroy() {
         super.onDestroy();
         secureStopSteps();
+        if (versusListener != null) versusListener.remove();
+    }
+
+    // ==== Listener de versus activos ====
+    private void startVersusListener() {
+        if (versusListener != null) versusListener.remove();
+
+        versusListener = FirebaseFirestore.getInstance()
+                .collection("versus")
+                .whereArrayContains("ver_players", uid)
+                .whereEqualTo("ver_finished", false)
+                .addSnapshotListener((qs, err) -> {
+                    if (err != null || qs == null) return;
+                    activeVersusIds.clear();
+                    for (DocumentSnapshot d : qs.getDocuments()) {
+                        activeVersusIds.add(d.getId());
+                    }
+                });
+    }
+
+    // ========= CALLBACK CENTRAL DE PASOS =========
+    private void onStepsUpdatedMain(long stepsToday) {
+        SharedPreferences sp = userPrefs();
+
+        // 1) cambio de día (record y reset de contadores locales)
+        maybeRunRollover();
+
+        // 2) Guardar pasos locales + UI
+        sp.edit().putLong(KEY_PASOS_HOY, stepsToday).apply();
+        tvKmTotalBig.setText(String.valueOf(stepsToday));
+
+        // 3) Actualizar VERSUS siempre que haya alguno activo (SIN throttle global)
+        if (!activeVersusIds.isEmpty()) {
+            for (String vsId : activeVersusIds) {
+                repo.updateVersusStepsQuiet(vsId, uid, stepsToday);
+            }
+        }
+
+        // 4) Throttle de 1 minuto solo para stats del usuario (km_total, km_semana, récord)
+        long now = System.currentTimeMillis();
+        if (now - lastSyncToFirestoreMillis < 60_000L) return;
+        lastSyncToFirestoreMillis = now;
+
+        long alreadySynced = sp.getLong(KEY_SYNCED_STEPS_TODAY, 0L);
+        long deltaSteps = stepsToday - alreadySynced;
+        if (deltaSteps <= 0L) return;
+
+        sp.edit().putLong(KEY_SYNCED_STEPS_TODAY, stepsToday).apply();
+
+        double kmDelta = deltaSteps * STEP_TO_KM;
+        if (kmDelta <= 0.0) return;
+
+        // km_total / km_semana
+        repo.addKmDelta(uid, kmDelta,
+                v -> {},
+                e -> Log.w(TAG, "addKmDelta delta error: " + e.getMessage()));
+
+        // récord diario
+        repo.updateMayorPasosDiaIfGreater(uid, stepsToday);
     }
 
     // ==== Prefs por usuario ====
@@ -252,15 +321,56 @@ public class MainActivity extends AppCompatActivity {
                     .putInt(KEY_DIAS_CONTADOS, 0)
                     .putBoolean(KEY_FIRST_LOGIN_DONE, true)
                     .putInt(KEY_LAST_LEVEL, 1)
+                    .putLong(KEY_SYNCED_STEPS_TODAY, 0L)
                     .apply();
             global.edit().putString(KEY_LAST_UID, uid).apply();
         } else {
             SharedPreferences up = userPrefs();
-            if (!up.contains(KEY_ULTIMO_DIA)) up.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
-            if (!up.contains(KEY_FIRST_LOGIN_DONE)) up.edit().putBoolean(KEY_FIRST_LOGIN_DONE, true).apply();
+            if (!up.contains(KEY_ULTIMO_DIA))
+                up.edit().putString(KEY_ULTIMO_DIA, todayString()).apply();
+            if (!up.contains(KEY_FIRST_LOGIN_DONE))
+                up.edit().putBoolean(KEY_FIRST_LOGIN_DONE, true).apply();
+            if (!up.contains(KEY_SYNCED_STEPS_TODAY))
+                up.edit().putLong(KEY_SYNCED_STEPS_TODAY, 0L).apply();
         }
     }
 
+    // ==== Rollover de día ====
+    private void maybeRunRollover() {
+        if (uid == null) return;
+
+        SharedPreferences sp = userPrefs();
+        String last  = sp.getString(KEY_ULTIMO_DIA, "");
+        String today = todayString();
+
+        if (today.equals(last)) return;
+
+        long pasosDiaAnterior = sp.getLong(KEY_PASOS_HOY, 0L);
+        repo.updateMayorPasosDiaIfGreater(uid, pasosDiaAnterior);
+
+        int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
+        if (diasContados >= 7) {
+            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error", e));
+            kmSemanaCache = 0.0;
+            diasContados = 0;
+        }
+
+        sp.edit()
+                .putString(KEY_ULTIMO_DIA, today)
+                .putLong(KEY_PASOS_HOY, 0L)
+                .putLong(KEY_SYNCED_STEPS_TODAY, 0L)
+                .putInt(KEY_DIAS_CONTADOS, diasContados)
+                .apply();
+
+        tvKmTotalBig.setText(String.valueOf(0));
+    }
+
+    private void updateBigStepsFromStorage() {
+        long pasosHoy = userPrefs().getLong(KEY_PASOS_HOY, 0L);
+        tvKmTotalBig.setText(String.valueOf(pasosHoy));
+    }
+
+    // ===== Navegación a fragments =====
     private void openGoalsFragment() {
         getSupportFragmentManager().beginTransaction()
                 .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
@@ -277,7 +387,9 @@ public class MainActivity extends AppCompatActivity {
                 .addToBackStack("stats")
                 .commit();
     }
-    private void openProfileSheet() { new ProfileFragment().show(getSupportFragmentManager(), "profile_sheet"); }
+    private void openProfileSheet() {
+        new ProfileFragment().show(getSupportFragmentManager(), "profile_sheet");
+    }
     private void openNotificationsFragment() {
         getSupportFragmentManager().beginTransaction()
                 .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
@@ -300,10 +412,12 @@ public class MainActivity extends AppCompatActivity {
         ArrayList<String> req = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= 29 &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
-                        != PackageManager.PERMISSION_GRANTED) req.add(Manifest.permission.ACTIVITY_RECOGNITION);
+                        != PackageManager.PERMISSION_GRANTED)
+            req.add(Manifest.permission.ACTIVITY_RECOGNITION);
         if (Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                        != PackageManager.PERMISSION_GRANTED) req.add(Manifest.permission.POST_NOTIFICATIONS);
+                        != PackageManager.PERMISSION_GRANTED)
+            req.add(Manifest.permission.POST_NOTIFICATIONS);
 
         if (!req.isEmpty()) permsLauncher.launch(req.toArray(new String[0]));
         else secureStartSteps();
@@ -316,45 +430,11 @@ public class MainActivity extends AppCompatActivity {
     private void secureStartSteps() { if (stepsManager != null && ensureARGranted()) try { stepsManager.start(); } catch (SecurityException ignored) {} }
     private void secureStopSteps()  { if (stepsManager != null) try { stepsManager.stop(); } catch (SecurityException ignored) {} }
 
-    // ==== Rollover y UI ====
+    // ==== Utilidades fecha ====
     private String todayString() { return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date()); }
     private String todayYMD()    { return new SimpleDateFormat("yyyyMMdd",  Locale.getDefault()).format(new Date()); }
     private String weeklyCycleString(long weekStartMs) {
         return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date(weekStartMs));
-    }
-
-    private void maybeRunRollover() {
-        if (uid == null) return;
-
-        SharedPreferences sp = userPrefs();
-        String last = sp.getString(KEY_ULTIMO_DIA, "");
-        String today = todayString();
-
-        if (today.equals(last)) return;
-
-        long pasosHoy = sp.getLong(KEY_PASOS_HOY, 0L);
-        double kmAgregar = pasosHoy * STEP_TO_KM;
-
-        repo.addKmDelta(uid, kmAgregar, v -> {}, e -> Log.w(TAG, "addKmDelta error: " + e.getMessage()));
-
-        repo.updateMayorPasosDiaIfGreater(uid, pasosHoy);
-
-        int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
-        if (diasContados >= 7) {
-            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error"));
-            kmSemanaCache = 0.0;
-            diasContados = 0;
-        } else {
-            kmSemanaCache = Math.max(0.0, kmSemanaCache + kmAgregar);
-        }
-
-        sp.edit().putString(KEY_ULTIMO_DIA, today).putLong(KEY_PASOS_HOY, 0L).putInt(KEY_DIAS_CONTADOS, diasContados).apply();
-        tvKmTotalBig.setText(String.valueOf(0));
-    }
-
-    private void updateBigStepsFromStorage() {
-        long pasosHoy = userPrefs().getLong(KEY_PASOS_HOY, 0L);
-        tvKmTotalBig.setText(String.valueOf(pasosHoy));
     }
 
     @Nullable private Double getNestedDouble(DocumentSnapshot snap, String dottedPath) {
@@ -363,7 +443,7 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    // ===================== AVATAR =====================
+// ===================== AVATAR =====================
     private void renderAvatarFromUserSnapshot(DocumentSnapshot snap) {
         String pielId     = asString(snap.get("usu_equipped.usu_piel"));
         String pantalonId = asString(snap.get("usu_equipped.usu_pantalon"));
