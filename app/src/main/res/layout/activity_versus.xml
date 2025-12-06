@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -9,8 +8,8 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true"
         android:clipToPadding="false"
+        android:fillViewport="true"
         android:paddingBottom="96dp">
 
         <LinearLayout
@@ -19,13 +18,12 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- HEADER ENERGÍA -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                app:cardBackgroundColor="#EEF2FF"
                 app:cardCornerRadius="18dp"
-                app:cardElevation="2dp"
-                app:cardBackgroundColor="#EEF2FF">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -46,10 +44,10 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:paddingBottom="8dp"
                         android:text="Tenés hasta 3 partidas activas por día."
                         android:textColor="#4B5563"
-                        android:textSize="13sp"
-                        android:paddingBottom="8dp" />
+                        android:textSize="13sp" />
 
                     <LinearLayout
                         android:id="@+id/llEnergyBar"
@@ -89,9 +87,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="#EEF2FF"
                 app:cardCornerRadius="18dp"
-                app:cardElevation="2dp"
-                app:cardBackgroundColor="#EEF2FF">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -102,19 +100,19 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:paddingBottom="2dp"
                         android:text="Versus en progreso"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
                         android:textColor="#111827"
-                        android:paddingBottom="2dp"/>
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:paddingBottom="4dp"
                         android:text="Continuá tus partidas activas o revisá resultados recientes."
-                        android:textSize="13sp"
                         android:textColor="#4B5563"
-                        android:paddingBottom="4dp"/>
+                        android:textSize="13sp" />
 
                     <LinearLayout
                         android:id="@+id/containerActive"
@@ -122,7 +120,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
                         android:paddingTop="4dp"
-                        android:paddingBottom="4dp"/>
+                        android:paddingBottom="4dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -131,9 +129,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="#ECFDF5"
                 app:cardCornerRadius="18dp"
-                app:cardElevation="2dp"
-                app:cardBackgroundColor="#ECFDF5">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -144,19 +142,19 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:paddingBottom="2dp"
                         android:text="Salas públicas y privadas"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
                         android:textColor="#111827"
-                        android:paddingBottom="2dp"/>
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:paddingBottom="4dp"
                         android:text="Unite con código o buscá salas abiertas para jugar rápido."
-                        android:textSize="13sp"
                         android:textColor="#047857"
-                        android:paddingBottom="4dp"/>
+                        android:textSize="13sp" />
 
                     <LinearLayout
                         android:id="@+id/containerRooms"
@@ -164,7 +162,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
                         android:paddingTop="4dp"
-                        android:paddingBottom="4dp"/>
+                        android:paddingBottom="4dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -173,11 +171,11 @@
                 android:id="@+id/btnCreateRoom"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
+                android:backgroundTint="#4F46E5"
+                android:fontFamily="sans-serif-medium"
                 android:text="Crear sala"
                 android:textAllCaps="false"
                 android:textColor="@android:color/white"
-                android:fontFamily="sans-serif-medium"
-                android:backgroundTint="#4F46E5"
                 app:cornerRadius="24dp"
                 app:icon="@drawable/energy_charged"
                 app:iconGravity="textStart"
@@ -199,8 +197,8 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="horizontal"
             android:gravity="center"
+            android:orientation="horizontal"
             android:paddingHorizontal="8dp">
 
             <ImageButton
@@ -210,8 +208,8 @@
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
                 android:foreground="?attr/selectableItemBackgroundBorderless"
-                app:srcCompat="@drawable/button_main"
-                android:scaleType="centerCrop"/>
+                android:scaleType="centerCrop"
+                app:srcCompat="@drawable/button_main" />
 
             <ImageButton
                 android:id="@+id/btnShop"
@@ -220,8 +218,8 @@
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
                 android:foreground="?attr/selectableItemBackgroundBorderless"
-                app:srcCompat="@drawable/button_shop"
-                android:scaleType="centerCrop"/>
+                android:scaleType="centerCrop"
+                app:srcCompat="@drawable/button_shop" />
 
             <ImageButton
                 android:id="@+id/btnVs"
@@ -230,8 +228,8 @@
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
                 android:foreground="?attr/selectableItemBackgroundBorderless"
-                app:srcCompat="@drawable/button_versus"
-                android:scaleType="centerCrop"/>
+                android:scaleType="centerCrop"
+                app:srcCompat="@drawable/button_versus" />
 
             <ImageButton
                 android:id="@+id/btnEvents"
@@ -240,8 +238,8 @@
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
                 android:foreground="?attr/selectableItemBackgroundBorderless"
-                app:srcCompat="@drawable/button_events"
-                android:scaleType="centerCrop"/>
+                android:scaleType="centerCrop"
+                app:srcCompat="@drawable/button_events" />
 
             <ImageButton
                 android:id="@+id/btnLeaderboards"
@@ -250,8 +248,8 @@
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
                 android:foreground="?attr/selectableItemBackgroundBorderless"
-                app:srcCompat="@drawable/button_leaderboards"
-                android:scaleType="centerCrop"/>
+                android:scaleType="centerCrop"
+                app:srcCompat="@drawable/button_leaderboards" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 

@@ -3,20 +3,20 @@
     android:id="@+id/newItemRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@android:color/white"
     android:orientation="vertical"
-    android:padding="20dp"
-    android:background="@android:color/white">
+    android:padding="20dp">
 
     <!-- Título -->
     <TextView
         android:id="@+id/tvTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
         android:text="¡Nuevo cosmético!"
-        android:textSize="20sp"
-        android:textStyle="bold"
         android:textColor="#111827"
-        android:paddingBottom="8dp" />
+        android:textSize="20sp"
+        android:textStyle="bold" />
 
     <!-- Subtítulo / nombre del ítem -->
     <TextView
@@ -24,8 +24,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Nombre del cosmético"
-        android:textSize="14sp"
-        android:textColor="#4B5563" />
+        android:textColor="#4B5563"
+        android:textSize="14sp" />
 
     <!-- Imagen del ítem -->
     <FrameLayout
@@ -51,11 +51,11 @@
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:layout_marginTop="16dp"
+        android:backgroundTint="#8B5CF6"
         android:text="Reclamar"
         android:textAllCaps="false"
-        android:textStyle="bold"
         android:textColor="@android:color/white"
-        android:backgroundTint="#8B5CF6" />
+        android:textStyle="bold" />
 
     <Space
         android:layout_width="match_parent"

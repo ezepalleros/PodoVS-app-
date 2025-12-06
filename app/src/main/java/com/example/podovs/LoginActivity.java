@@ -28,17 +28,17 @@ public class LoginActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        etEmail     = findViewById(R.id.etEmail);
-        etPassword  = findViewById(R.id.etPassword);
+        etEmail = findViewById(R.id.etEmail);
+        etPassword = findViewById(R.id.etPassword);
         btnIngresar = findViewById(R.id.btnIngresar);
-        tvRegister  = findViewById(R.id.tvRegister);
+        tvRegister = findViewById(R.id.tvRegister);
 
         repo = new FirestoreRepo();
 
         SharedPreferences sp = getSharedPreferences("session", MODE_PRIVATE);
-        String savedUid   = sp.getString("uid", null);
-        String savedName  = sp.getString("user_name", "Jugador");
-        FirebaseUser fu   = repo.currentUser();
+        String savedUid = sp.getString("uid", null);
+        String savedName = sp.getString("user_name", "Jugador");
+        FirebaseUser fu = repo.currentUser();
 
         if (fu != null && savedUid != null && !savedUid.isEmpty()) {
             continueToMain(savedUid, savedName);
@@ -55,7 +55,7 @@ public class LoginActivity extends AppCompatActivity {
 
     private void intentarLogin() {
         String email = etEmail.getText().toString().trim();
-        String pass  = etPassword.getText().toString().trim();
+        String pass = etPassword.getText().toString().trim();
 
         if (email.isEmpty() || pass.isEmpty()) {
             Toast.makeText(this, "Completá email y contraseña.", Toast.LENGTH_SHORT).show();

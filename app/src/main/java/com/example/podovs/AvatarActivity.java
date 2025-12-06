@@ -49,6 +49,7 @@ public class AvatarActivity extends AppCompatActivity {
     private String currentTipo = "piel";
 
     private static final Map<String, String> TIPO_TO_USER_FIELD = new HashMap<>();
+
     static {
         TIPO_TO_USER_FIELD.put("piel", "usu_equipped.usu_piel");
         TIPO_TO_USER_FIELD.put("cabeza", "usu_equipped.usu_cabeza");
@@ -58,6 +59,7 @@ public class AvatarActivity extends AppCompatActivity {
     }
 
     private static final Map<String, int[]> OFFSETS = new HashMap<>();
+
     static {
         OFFSETS.put("cos_id_7", new int[]{0, -6});
     }
@@ -68,28 +70,46 @@ public class AvatarActivity extends AppCompatActivity {
         setContentView(R.layout.activity_avatar);
 
         ivPreview = findViewById(R.id.ivPreview);
-        rv        = findViewById(R.id.rvItems);
-        btnCatPiel     = findViewById(R.id.btnCatPiel);
-        btnCatCabeza   = findViewById(R.id.btnCatCabeza);
-        btnCatRemera   = findViewById(R.id.btnCatRemera);
+        rv = findViewById(R.id.rvItems);
+        btnCatPiel = findViewById(R.id.btnCatPiel);
+        btnCatCabeza = findViewById(R.id.btnCatCabeza);
+        btnCatRemera = findViewById(R.id.btnCatRemera);
         btnCatPantalon = findViewById(R.id.btnCatPantalon);
-        btnCatZapas    = findViewById(R.id.btnCatZapas);
-        btnConfirm     = findViewById(R.id.btnConfirm);
-        btnCancel      = findViewById(R.id.btnCancel);
+        btnCatZapas = findViewById(R.id.btnCatZapas);
+        btnConfirm = findViewById(R.id.btnConfirm);
+        btnCancel = findViewById(R.id.btnCancel);
 
         rv.setLayoutManager(new GridLayoutManager(this, 4));
 
-        db  = FirebaseFirestore.getInstance();
+        db = FirebaseFirestore.getInstance();
         uid = getSharedPreferences("session", MODE_PRIVATE).getString("uid", null);
-        if (uid == null) { finish(); return; }
+        if (uid == null) {
+            finish();
+            return;
+        }
 
         loadData();
 
-        btnCatPiel.setOnClickListener(v -> { currentTipo = "piel"; refreshGrid(); });
-        btnCatCabeza.setOnClickListener(v -> { currentTipo = "cabeza"; refreshGrid(); });
-        btnCatRemera.setOnClickListener(v -> { currentTipo = "remera"; refreshGrid(); });
-        btnCatPantalon.setOnClickListener(v -> { currentTipo = "pantalon"; refreshGrid(); });
-        btnCatZapas.setOnClickListener(v -> { currentTipo = "zapatillas"; refreshGrid(); });
+        btnCatPiel.setOnClickListener(v -> {
+            currentTipo = "piel";
+            refreshGrid();
+        });
+        btnCatCabeza.setOnClickListener(v -> {
+            currentTipo = "cabeza";
+            refreshGrid();
+        });
+        btnCatRemera.setOnClickListener(v -> {
+            currentTipo = "remera";
+            refreshGrid();
+        });
+        btnCatPantalon.setOnClickListener(v -> {
+            currentTipo = "pantalon";
+            refreshGrid();
+        });
+        btnCatZapas.setOnClickListener(v -> {
+            currentTipo = "zapatillas";
+            refreshGrid();
+        });
 
         btnConfirm.setOnClickListener(v -> saveSelection());
         btnCancel.setOnClickListener(v -> finish());
@@ -101,22 +121,22 @@ public class AvatarActivity extends AppCompatActivity {
                 db.collection("users").document(uid).collection("my_cosmetics").get()
         ).addOnSuccessListener(list -> {
             DocumentSnapshot user = (DocumentSnapshot) list.get(0);
-            QuerySnapshot inv     = (QuerySnapshot)    list.get(1);
+            QuerySnapshot inv = (QuerySnapshot) list.get(1);
 
-            selectedByTipo.put("piel",        asString(user.get("usu_equipped.usu_piel")));
-            selectedByTipo.put("cabeza",      asString(user.get("usu_equipped.usu_cabeza")));
-            selectedByTipo.put("remera",      asString(user.get("usu_equipped.usu_remera")));
-            selectedByTipo.put("pantalon",    asString(user.get("usu_equipped.usu_pantalon")));
-            selectedByTipo.put("zapatillas",  asString(user.get("usu_equipped.usu_zapas")));
+            selectedByTipo.put("piel", asString(user.get("usu_equipped.usu_piel")));
+            selectedByTipo.put("cabeza", asString(user.get("usu_equipped.usu_cabeza")));
+            selectedByTipo.put("remera", asString(user.get("usu_equipped.usu_remera")));
+            selectedByTipo.put("pantalon", asString(user.get("usu_equipped.usu_pantalon")));
+            selectedByTipo.put("zapatillas", asString(user.get("usu_equipped.usu_zapas")));
 
             all.clear();
             for (DocumentSnapshot d : inv.getDocuments()) {
-                String id     = d.getId();
+                String id = d.getId();
                 Map<String, Object> cache = (Map<String, Object>) d.get("myc_cache");
-                String tipo   = cache == null ? null : asString(cache.get("cos_tipo"));
-                String asset  = cache == null ? null : asString(cache.get("cos_asset"));
-                String aType  = cache == null ? null : asString(cache.get("cos_assetType"));
-                boolean eq    = Boolean.TRUE.equals(d.getBoolean("myc_equipped"));
+                String tipo = cache == null ? null : asString(cache.get("cos_tipo"));
+                String asset = cache == null ? null : asString(cache.get("cos_asset"));
+                String aType = cache == null ? null : asString(cache.get("cos_assetType"));
+                boolean eq = Boolean.TRUE.equals(d.getBoolean("myc_equipped"));
                 all.add(new Cosmetic(id, tipo, asset, aType, eq));
             }
 
@@ -144,10 +164,10 @@ public class AvatarActivity extends AppCompatActivity {
 
     private void renderPreview() {
         String selPiel = selectedByTipo.get("piel");
-        String selZap  = selectedByTipo.get("zapatillas");
-        String selPan  = selectedByTipo.get("pantalon");
-        String selRem  = selectedByTipo.get("remera");
-        String selCab  = selectedByTipo.get("cabeza");
+        String selZap = selectedByTipo.get("zapatillas");
+        String selPan = selectedByTipo.get("pantalon");
+        String selRem = selectedByTipo.get("remera");
+        String selCab = selectedByTipo.get("cabeza");
 
         List<LayerReq> reqs = new ArrayList<>();
         addReq(reqs, selPiel);
@@ -156,12 +176,18 @@ public class AvatarActivity extends AppCompatActivity {
         addReq(reqs, selRem);
         addReq(reqs, selCab);
 
-        if (reqs.isEmpty()) { ivPreview.setImageDrawable(null); return; }
+        if (reqs.isEmpty()) {
+            ivPreview.setImageDrawable(null);
+            return;
+        }
         loadAllDrawables(reqs, this::composeAndShow);
     }
 
     private void composeAndShow(List<Layer> layers) {
-        if (layers.isEmpty()) { ivPreview.setImageDrawable(null); return; }
+        if (layers.isEmpty()) {
+            ivPreview.setImageDrawable(null);
+            return;
+        }
 
         int bw = Math.max(32, layers.get(0).drawable.getIntrinsicWidth());
         int bh = Math.max(48, layers.get(0).drawable.getIntrinsicHeight());
@@ -171,7 +197,7 @@ public class AvatarActivity extends AppCompatActivity {
 
         for (Layer l : layers) {
             Drawable d = l.drawable;
-            d.setBounds(0,0,bw,bh);
+            d.setBounds(0, 0, bw, bh);
             canvas.save();
             canvas.translate(l.offX, l.offY);
             d.draw(canvas);
@@ -179,8 +205,8 @@ public class AvatarActivity extends AppCompatActivity {
         }
 
         int targetH = dpToPx(180);
-        int factor  = Math.max(1, targetH / bh);
-        Bitmap scaled = Bitmap.createScaledBitmap(base, bw*factor, bh*factor, /*filter=*/false);
+        int factor = Math.max(1, targetH / bh);
+        Bitmap scaled = Bitmap.createScaledBitmap(base, bw * factor, bh * factor, /*filter=*/false);
 
         ivPreview.setAdjustViewBounds(true);
         ivPreview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -192,7 +218,7 @@ public class AvatarActivity extends AppCompatActivity {
         WriteBatch batch = db.batch();
 
         Map<String, Object> upd = new HashMap<>();
-        for (Map.Entry<String,String> e : selectedByTipo.entrySet()) {
+        for (Map.Entry<String, String> e : selectedByTipo.entrySet()) {
             String tipo = e.getKey();
             String field = TIPO_TO_USER_FIELD.get(tipo);
             if (field != null) upd.put(field, e.getValue());
@@ -225,7 +251,7 @@ public class AvatarActivity extends AppCompatActivity {
         if (cosId == null) return;
         for (Cosmetic c : all) {
             if (cosId.equals(c.id)) {
-                int[] off = OFFSETS.getOrDefault(c.id, new int[]{0,0});
+                int[] off = OFFSETS.getOrDefault(c.id, new int[]{0, 0});
                 out.add(new LayerReq(c.asset, c.assetType, off[0], off[1]));
                 break;
             }
@@ -235,7 +261,10 @@ public class AvatarActivity extends AppCompatActivity {
     private void loadAllDrawables(List<LayerReq> reqs, OnLayersReady cb) {
         final Layer[] slots = new Layer[reqs.size()];
         final int total = reqs.size();
-        if (total == 0) { cb.onReady(new ArrayList<>()); return; }
+        if (total == 0) {
+            cb.onReady(new ArrayList<>());
+            return;
+        }
 
         final int[] count = {0};
         for (int i = 0; i < reqs.size(); i++) {
@@ -243,7 +272,8 @@ public class AvatarActivity extends AppCompatActivity {
             final LayerReq r = reqs.get(i);
 
             loadDrawable(r.asset, r.assetType, new CustomTarget<Drawable>() {
-                @Override public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                @Override
+                public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
                     slots[idx] = new Layer(resource, r.offX, r.offY);
                     if (++count[0] == total) {
                         List<Layer> out = new ArrayList<>();
@@ -251,14 +281,18 @@ public class AvatarActivity extends AppCompatActivity {
                         cb.onReady(out);
                     }
                 }
-                @Override public void onLoadCleared(@Nullable Drawable placeholder) {
+
+                @Override
+                public void onLoadCleared(@Nullable Drawable placeholder) {
                     if (++count[0] == total) {
                         List<Layer> out = new ArrayList<>();
                         for (Layer l : slots) if (l != null) out.add(l);
                         cb.onReady(out);
                     }
                 }
-                @Override public void onLoadFailed(@Nullable Drawable errorDrawable) {
+
+                @Override
+                public void onLoadFailed(@Nullable Drawable errorDrawable) {
                     if (++count[0] == total) {
                         List<Layer> out = new ArrayList<>();
                         for (Layer l : slots) if (l != null) out.add(l);
@@ -271,7 +305,10 @@ public class AvatarActivity extends AppCompatActivity {
 
     private void loadDrawable(@Nullable String asset, @Nullable String assetType,
                               @NonNull CustomTarget<Drawable> target) {
-        if (asset == null) { target.onResourceReady(new EmptyDrawable(), null); return; }
+        if (asset == null) {
+            target.onResourceReady(new EmptyDrawable(), null);
+            return;
+        }
 
         if ("cloudinary".equalsIgnoreCase(assetType)) {
             String cloud = getString(R.string.cloudinary_cloud_name);
@@ -292,29 +329,71 @@ public class AvatarActivity extends AppCompatActivity {
         target.onResourceReady(d != null ? d : new EmptyDrawable(), null);
     }
 
-    private interface OnLayersReady { void onReady(List<Layer> layers); }
-    private static class LayerReq {
-        final String asset; final String assetType; final int offX; final int offY;
-        LayerReq(String a, String t, int x, int y) { asset=a; assetType=t; offX=x; offY=y; }
+    private interface OnLayersReady {
+        void onReady(List<Layer> layers);
     }
+
+    private static class LayerReq {
+        final String asset;
+        final String assetType;
+        final int offX;
+        final int offY;
+
+        LayerReq(String a, String t, int x, int y) {
+            asset = a;
+            assetType = t;
+            offX = x;
+            offY = y;
+        }
+    }
+
     private static class Layer {
-        final Drawable drawable; final int offX; final int offY;
-        Layer(Drawable d, int x, int y) { drawable=d; offX=x; offY=y; }
+        final Drawable drawable;
+        final int offX;
+        final int offY;
+
+        Layer(Drawable d, int x, int y) {
+            drawable = d;
+            offX = x;
+            offY = y;
+        }
     }
 
     // Drawable transparente de 32x48
     private static class EmptyDrawable extends Drawable {
-        @Override public void draw(@NonNull Canvas canvas) { }
-        @Override public void setAlpha(int alpha) {}
-        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
-        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSPARENT; }
-        @Override public int getIntrinsicWidth() { return 32; }
-        @Override public int getIntrinsicHeight() { return 48; }
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+        }
+
+        @Override
+        public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {
+        }
+
+        @Override
+        public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSPARENT;
+        }
+
+        @Override
+        public int getIntrinsicWidth() {
+            return 32;
+        }
+
+        @Override
+        public int getIntrinsicHeight() {
+            return 48;
+        }
     }
 
-    @Nullable private String asString(Object o) {
-        return (o instanceof String && !((String)o).isEmpty()) ? (String) o : null;
+    @Nullable
+    private String asString(Object o) {
+        return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null;
     }
+
     private int dpToPx(int dp) {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp,
                 getResources().getDisplayMetrics()));
@@ -327,14 +406,24 @@ public class AvatarActivity extends AppCompatActivity {
         final String asset;
         final String assetType;
         final boolean equipped;
+
         Cosmetic(String id, String tipo, String asset, String assetType, boolean eq) {
-            this.id=id; this.tipo=tipo; this.asset=asset; this.assetType=assetType; this.equipped=eq;
+            this.id = id;
+            this.tipo = tipo;
+            this.asset = asset;
+            this.assetType = assetType;
+            this.equipped = eq;
         }
-        static Cosmetic none(String tipo) { return new Cosmetic(null, tipo, null, null, false); }
+
+        static Cosmetic none(String tipo) {
+            return new Cosmetic(null, tipo, null, null, false);
+        }
     }
 
     private class CosAdapter extends RecyclerView.Adapter<CosAdapter.Holder> {
-        interface OnPick { void onPick(Cosmetic c); }
+        interface OnPick {
+            void onPick(Cosmetic c);
+        }
 
         final List<Cosmetic> data;
         final String tipo;
@@ -342,13 +431,18 @@ public class AvatarActivity extends AppCompatActivity {
         final OnPick onPick;
 
         CosAdapter(List<Cosmetic> data, String tipo, String selectedId, OnPick onPick) {
-            this.data = data; this.tipo = tipo; this.selectedId = selectedId; this.onPick = onPick;
+            this.data = data;
+            this.tipo = tipo;
+            this.selectedId = selectedId;
+            this.onPick = onPick;
         }
 
-        @NonNull @Override public Holder onCreateViewHolder(@NonNull ViewGroup p, int viewType) {
+        @NonNull
+        @Override
+        public Holder onCreateViewHolder(@NonNull ViewGroup p, int viewType) {
             ImageView iv = new ImageView(p.getContext());
             int pad = dp(p.getContext(), 6);
-            iv.setPadding(pad,pad,pad,pad);
+            iv.setPadding(pad, pad, pad, pad);
             iv.setAdjustViewBounds(true);
             iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             iv.setLayoutParams(new RecyclerView.LayoutParams(
@@ -356,7 +450,8 @@ public class AvatarActivity extends AppCompatActivity {
             return new Holder(iv);
         }
 
-        @Override public void onBindViewHolder(@NonNull Holder h, int i) {
+        @Override
+        public void onBindViewHolder(@NonNull Holder h, int i) {
             Context ctx = h.itemView.getContext();
             Cosmetic c = data.get(i);
 
@@ -372,7 +467,8 @@ public class AvatarActivity extends AppCompatActivity {
                 Glide.with(ctx).load(c.asset).into(h.iv);
             } else {
                 int res = ctx.getResources().getIdentifier(c.asset, "drawable", ctx.getPackageName());
-                if (res != 0) h.iv.setImageResource(res); else h.iv.setImageDrawable(null);
+                if (res != 0) h.iv.setImageResource(res);
+                else h.iv.setImageDrawable(null);
             }
 
             boolean sel = (selectedId == null && c.id == null) ||
@@ -381,15 +477,23 @@ public class AvatarActivity extends AppCompatActivity {
             h.itemView.setOnClickListener(v -> onPick.onPick(c));
         }
 
-        @Override public int getItemCount() { return data.size(); }
+        @Override
+        public int getItemCount() {
+            return data.size();
+        }
 
         int dp(Context c, int d) {
             return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, d,
                     c.getResources().getDisplayMetrics()));
         }
+
         class Holder extends RecyclerView.ViewHolder {
             ImageView iv;
-            Holder(@NonNull View itemView) { super(itemView); iv = (ImageView) itemView; }
+
+            Holder(@NonNull View itemView) {
+                super(itemView);
+                iv = (ImageView) itemView;
+            }
         }
     }
 }

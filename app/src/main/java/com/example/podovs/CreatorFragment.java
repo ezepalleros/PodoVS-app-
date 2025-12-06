@@ -67,7 +67,8 @@ public class CreatorFragment extends DialogFragment {
             rootOverlay.setOnClickListener(v -> dismiss());
         }
         if (card != null) {
-            card.setOnClickListener(v -> {});
+            card.setOnClickListener(v -> {
+            });
         }
 
         if (btnClose != null) {

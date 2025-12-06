@@ -73,7 +73,9 @@ public class MainActivity extends AppCompatActivity {
     // pasos ya sincronizados para km_total/km_semana
     private static final String KEY_SYNCED_STEPS_TODAY = "synced_steps_today";
 
-    private SharedPreferences userPrefs() { return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE); }
+    private SharedPreferences userPrefs() {
+        return getSharedPreferences(PREFS_PREFIX + uid, MODE_PRIVATE);
+    }
 
     private double kmSemanaCache = 0.0;
     private long lastSyncToFirestoreMillis = 0L;
@@ -97,10 +99,10 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        tvKmTotalBig    = findViewById(R.id.tvKmTotalBig);
+        tvKmTotalBig = findViewById(R.id.tvKmTotalBig);
         tvKmSemanaSmall = findViewById(R.id.tvKmSemanaSmall);
-        ivAvatar        = findViewById(R.id.ivAvatar);
-        tvCoins         = findViewById(R.id.tvCoins);
+        ivAvatar = findViewById(R.id.ivAvatar);
+        tvCoins = findViewById(R.id.tvCoins);
         ivAvatar.setImageResource(R.drawable.default_avatar);
 
         if (tvKmSemanaSmall != null) tvKmSemanaSmall.setVisibility(View.GONE);
@@ -118,11 +120,14 @@ public class MainActivity extends AppCompatActivity {
         ensurePerUserPrefsInitialized();
 
         repo = new FirestoreRepo();
-        db   = FirebaseFirestore.getInstance();
+        db = FirebaseFirestore.getInstance();
 
-        repo.addStarterPackIfMissing(uid, v -> {}, e -> {});
+        repo.addStarterPackIfMissing(uid, v -> {
+        }, e -> {
+        });
         repo.ensureStats(uid);
-        repo.normalizeXpLevel(uid, v -> {}, e -> Log.w(TAG, "normalizeXpLevel: " + e.getMessage()));
+        repo.normalizeXpLevel(uid, v -> {
+        }, e -> Log.w(TAG, "normalizeXpLevel: " + e.getMessage()));
 
         repo.listenUser(uid, (snap, err) -> {
             if (err != null) {
@@ -148,7 +153,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 // metas
-                long metaDaily  = (snap.getLong("usu_stats.meta_diaria_pasos")  == null) ? 8000L  : snap.getLong("usu_stats.meta_diaria_pasos");
+                long metaDaily = (snap.getLong("usu_stats.meta_diaria_pasos") == null) ? 8000L : snap.getLong("usu_stats.meta_diaria_pasos");
                 long metaWeekly = (snap.getLong("usu_stats.meta_semanal_pasos") == null) ? 56000L : snap.getLong("usu_stats.meta_semanal_pasos");
 
                 long stepsTodayLocal = userPrefs().getLong(KEY_PASOS_HOY, 0L);
@@ -185,9 +190,9 @@ public class MainActivity extends AppCompatActivity {
         // Bottom bar
         ImageButton btnHome = findViewById(R.id.btnHome);
         ImageButton btnShop = findViewById(R.id.btnShop);
-        ImageButton btnVs   = findViewById(R.id.btnVs);
-        ImageButton btnEvt  = findViewById(R.id.btnEvents);
-        ImageButton btnLb   = findViewById(R.id.btnLeaderboards);
+        ImageButton btnVs = findViewById(R.id.btnVs);
+        ImageButton btnEvt = findViewById(R.id.btnEvents);
+        ImageButton btnLb = findViewById(R.id.btnLeaderboards);
 
         if (btnHome != null) {
             btnHome.setOnClickListener(v ->
@@ -226,7 +231,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnTopNotifications).setOnClickListener(v -> openNotificationsFragment());
         findViewById(R.id.btnTopOptions).setOnClickListener(v -> openOptionsFragment());
 
-        getSupportFragmentManager().setFragmentResultListener("coins_changed", this, (requestKey, bundle) -> {});
+        getSupportFragmentManager().setFragmentResultListener("coins_changed", this, (requestKey, bundle) -> {
+        });
 
         startVersusListener();
 
@@ -238,19 +244,22 @@ public class MainActivity extends AppCompatActivity {
         updateBigStepsFromStorage();
     }
 
-    @Override protected void onResume() {
+    @Override
+    protected void onResume() {
         super.onResume();
         if (userPrefs().getBoolean(KEY_FIRST_LOGIN_DONE, false)) maybeRunRollover();
         updateBigStepsFromStorage();
         secureStartSteps();
     }
 
-    @Override protected void onPause() {
+    @Override
+    protected void onPause() {
         super.onPause();
         secureStopSteps();  // solo apaga el scheduler, no el sensor
     }
 
-    @Override protected void onDestroy() {
+    @Override
+    protected void onDestroy() {
         super.onDestroy();
         secureStopSteps();
         if (versusListener != null) versusListener.remove();
@@ -301,7 +310,8 @@ public class MainActivity extends AppCompatActivity {
         if (kmDelta <= 0.0) return;
 
         repo.addKmDelta(uid, kmDelta,
-                v -> {},
+                v -> {
+                },
                 e -> Log.w(TAG, "addKmDelta delta error: " + e.getMessage()));
 
         repo.updateMayorPasosDiaIfGreater(uid, stepsToday);
@@ -338,7 +348,7 @@ public class MainActivity extends AppCompatActivity {
         if (uid == null) return;
 
         SharedPreferences sp = userPrefs();
-        String last  = sp.getString(KEY_ULTIMO_DIA, "");
+        String last = sp.getString(KEY_ULTIMO_DIA, "");
         String today = todayString();
 
         if (today.equals(last)) return;
@@ -348,7 +358,8 @@ public class MainActivity extends AppCompatActivity {
 
         int diasContados = sp.getInt(KEY_DIAS_CONTADOS, 0) + 1;
         if (diasContados >= 7) {
-            repo.setKmSemana(uid, 0.0, v -> {}, e -> Log.w(TAG, "reset semana error", e));
+            repo.setKmSemana(uid, 0.0, v -> {
+            }, e -> Log.w(TAG, "reset semana error", e));
             kmSemanaCache = 0.0;
             diasContados = 0;
         }
@@ -377,6 +388,7 @@ public class MainActivity extends AppCompatActivity {
                 .addToBackStack("goals")
                 .commit();
     }
+
     private void openStatsFragment() {
         getSupportFragmentManager().beginTransaction()
                 .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
@@ -385,9 +397,11 @@ public class MainActivity extends AppCompatActivity {
                 .addToBackStack("stats")
                 .commit();
     }
+
     private void openProfileSheet() {
         new ProfileFragment().show(getSupportFragmentManager(), "profile_sheet");
     }
+
     private void openNotificationsFragment() {
         getSupportFragmentManager().beginTransaction()
                 .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
@@ -396,6 +410,7 @@ public class MainActivity extends AppCompatActivity {
                 .addToBackStack("notifications")
                 .commit();
     }
+
     private void openOptionsFragment() {
         getSupportFragmentManager().beginTransaction()
                 .setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out,
@@ -420,34 +435,54 @@ public class MainActivity extends AppCompatActivity {
         if (!req.isEmpty()) permsLauncher.launch(req.toArray(new String[0]));
         else secureStartSteps();
     }
+
     private boolean ensureARGranted() {
         return !(Build.VERSION.SDK_INT >= 29) ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
                         == PackageManager.PERMISSION_GRANTED;
     }
-    private void secureStartSteps() { if (stepsManager != null && ensureARGranted()) try { stepsManager.start(); } catch (SecurityException ignored) {} }
-    private void secureStopSteps()  { if (stepsManager != null) try { stepsManager.stop(); } catch (SecurityException ignored) {} }
+
+    private void secureStartSteps() {
+        if (stepsManager != null && ensureARGranted()) try {
+            stepsManager.start();
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    private void secureStopSteps() {
+        if (stepsManager != null) try {
+            stepsManager.stop();
+        } catch (SecurityException ignored) {
+        }
+    }
 
     // ==== Utilidades fecha ====
-    private String todayString() { return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date()); }
-    private String todayYMD()    { return new SimpleDateFormat("yyyyMMdd",  Locale.getDefault()).format(new Date()); }
+    private String todayString() {
+        return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+    }
+
+    private String todayYMD() {
+        return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date());
+    }
+
     private String weeklyCycleString(long weekStartMs) {
         return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date(weekStartMs));
     }
 
-    @Nullable private Double getNestedDouble(DocumentSnapshot snap, String dottedPath) {
+    @Nullable
+    private Double getNestedDouble(DocumentSnapshot snap, String dottedPath) {
         Object val = snap.get(dottedPath);
         if (val instanceof Number) return ((Number) val).doubleValue();
         return null;
     }
 
-// ===================== AVATAR =====================
+    // ===================== AVATAR =====================
     private void renderAvatarFromUserSnapshot(DocumentSnapshot snap) {
-        String pielId     = asString(snap.get("usu_equipped.usu_piel"));
+        String pielId = asString(snap.get("usu_equipped.usu_piel"));
         String pantalonId = asString(snap.get("usu_equipped.usu_pantalon"));
-        String remeraId   = asString(snap.get("usu_equipped.usu_remera"));
-        String zapasId    = asString(snap.get("usu_equipped.usu_zapas"));
-        String cabezaId   = asString(snap.get("usu_equipped.usu_cabeza"));
+        String remeraId = asString(snap.get("usu_equipped.usu_remera"));
+        String zapasId = asString(snap.get("usu_equipped.usu_zapas"));
+        String cabezaId = asString(snap.get("usu_equipped.usu_cabeza"));
 
         if (pielId == null && pantalonId == null && remeraId == null
                 && zapasId == null && cabezaId == null) {
@@ -462,17 +497,30 @@ public class MainActivity extends AppCompatActivity {
                 .addOnFailureListener(e -> Log.w(TAG, "my_cosmetics get() error: " + e.getMessage()));
     }
 
-    private static class LayerRequest { final String type; final String asset;
-        LayerRequest(String t, String a) { type = t; asset = a; } }
+    private static class LayerRequest {
+        final String type;
+        final String asset;
 
-    @Nullable private LayerRequest fromCache(QuerySnapshot qs, @Nullable String cosId) {
+        LayerRequest(String t, String a) {
+            type = t;
+            asset = a;
+        }
+    }
+
+    @Nullable
+    private LayerRequest fromCache(QuerySnapshot qs, @Nullable String cosId) {
         if (cosId == null) return null;
         DocumentSnapshot d = null;
-        for (DocumentSnapshot doc : qs) { if (cosId.equals(doc.getId())) { d = doc; break; } }
+        for (DocumentSnapshot doc : qs) {
+            if (cosId.equals(doc.getId())) {
+                d = doc;
+                break;
+            }
+        }
         if (d == null) return null;
         Object at = d.get("myc_cache.cos_assetType");
         Object av = d.get("myc_cache.cos_asset");
-        String type  = (at instanceof String && !((String) at).isEmpty()) ? (String) at : null;
+        String type = (at instanceof String && !((String) at).isEmpty()) ? (String) at : null;
         String asset = (av instanceof String && !((String) av).isEmpty()) ? (String) av : null;
         if (asset == null) return null;
         return new LayerRequest(type, asset);
@@ -492,7 +540,7 @@ public class MainActivity extends AppCompatActivity {
                                             @Nullable String zapasId,
                                             @Nullable String cabezaId) {
 
-        LayerRequest[] reqs = new LayerRequest[] {
+        LayerRequest[] reqs = new LayerRequest[]{
                 fromCache(qs, pielId),
                 fromCache(qs, zapasId),
                 fromCache(qs, pantalonId),
@@ -501,11 +549,16 @@ public class MainActivity extends AppCompatActivity {
         };
 
         boolean anyRemote = false;
-        for (LayerRequest r : reqs) if (isRemote(r)) { anyRemote = true; break; }
+        for (LayerRequest r : reqs)
+            if (isRemote(r)) {
+                anyRemote = true;
+                break;
+            }
 
         if (!anyRemote) {
             ArrayList<Drawable> layers = new ArrayList<>();
-            for (LayerRequest r : reqs) if (r != null && r.asset != null) addLayerIfExists(layers, r.asset);
+            for (LayerRequest r : reqs)
+                if (r != null && r.asset != null) addLayerIfExists(layers, r.asset);
             if (layers.isEmpty()) {
                 int def = getResIdByName("piel_startskin");
                 if (def != 0) ivAvatar.setImageResource(def);
@@ -529,7 +582,9 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private interface LayersReady { void onReady(ArrayList<Drawable> layers); }
+    private interface LayersReady {
+        void onReady(ArrayList<Drawable> layers);
+    }
 
     private void loadLayersAsync(LayerRequest[] reqs, LayersReady cb) {
         final Drawable[] slots = new Drawable[reqs.length];
@@ -540,13 +595,18 @@ public class MainActivity extends AppCompatActivity {
             final int idx = i;
             final LayerRequest r = reqs[i];
 
-            if (r == null || r.asset == null) { done[0]++; maybeFinishOrdered(slots, done[0], total, cb); continue; }
+            if (r == null || r.asset == null) {
+                done[0]++;
+                maybeFinishOrdered(slots, done[0], total, cb);
+                continue;
+            }
 
             if (!isRemote(r)) {
                 int resId = getResIdByName(r.asset);
                 Drawable dr = (resId != 0) ? ContextCompat.getDrawable(this, resId) : null;
                 slots[idx] = dr;
-                done[0]++; maybeFinishOrdered(slots, done[0], total, cb);
+                done[0]++;
+                maybeFinishOrdered(slots, done[0], total, cb);
             } else {
                 String url = (r.asset.startsWith("http://") || r.asset.startsWith("https://"))
                         ? r.asset
@@ -589,7 +649,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Nullable private String asString(Object o) { return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null; }
+    @Nullable
+    private String asString(Object o) {
+        return (o instanceof String && !((String) o).isEmpty()) ? (String) o : null;
+    }
+
     private void addLayerIfExists(ArrayList<Drawable> layers, @Nullable String assetName) {
         if (assetName == null) return;
         int resId = getResIdByName(assetName);
@@ -597,5 +661,8 @@ public class MainActivity extends AppCompatActivity {
         Drawable dr = ContextCompat.getDrawable(this, resId);
         if (dr != null) layers.add(dr);
     }
-    private int getResIdByName(String name) { return getResources().getIdentifier(name, "drawable", getPackageName()); }
+
+    private int getResIdByName(String name) {
+        return getResources().getIdentifier(name, "drawable", getPackageName());
+    }
 }

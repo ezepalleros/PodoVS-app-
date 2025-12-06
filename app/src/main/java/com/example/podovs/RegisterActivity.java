@@ -31,10 +31,9 @@ public class RegisterActivity extends AppCompatActivity {
 
     private FirestoreRepo repo;
 
-    // Colores
-    private static final int COL_EASY   = 0xFF6FE6B7;
+    private static final int COL_EASY = 0xFF6FE6B7;
     private static final int COL_MEDIUM = 0xFFFFC107;
-    private static final int COL_HARD   = 0xFFF44336;
+    private static final int COL_HARD = 0xFFF44336;
 
     private String onboardingUid = null;
 
@@ -51,15 +50,15 @@ public class RegisterActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        etNombre       = findViewById(R.id.etNombre);
-        etEmail        = findViewById(R.id.etEmail);
-        etPassword     = findViewById(R.id.etPassword);
-        spDificultad   = findViewById(R.id.spDificultad);
+        etNombre = findViewById(R.id.etNombre);
+        etEmail = findViewById(R.id.etEmail);
+        etPassword = findViewById(R.id.etPassword);
+        spDificultad = findViewById(R.id.spDificultad);
         btnCrearCuenta = findViewById(R.id.btnCrearCuenta);
 
-        tvDifDetalles  = findViewById(R.id.tvDifDetalles);
-        tvDifTitulo    = findViewById(R.id.tvDifTitulo);
-        dotSelected    = findViewById(R.id.dotSelected);
+        tvDifDetalles = findViewById(R.id.tvDifDetalles);
+        tvDifTitulo = findViewById(R.id.tvDifTitulo);
+        dotSelected = findViewById(R.id.dotSelected);
 
         repo = new FirestoreRepo();
 
@@ -73,48 +72,69 @@ public class RegisterActivity extends AppCompatActivity {
 
         String[] difs = new String[]{"bajo", "medio", "alto"};
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, difs) {
-            @Override public View getView(int position, View convertView, ViewGroup parent) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
                 View v = super.getView(position, convertView, parent);
-                tint((TextView) v, getItem(position)); return v;
+                tint((TextView) v, getItem(position));
+                return v;
             }
-            @Override public View getDropDownView(int position, View convertView, ViewGroup parent) {
+
+            @Override
+            public View getDropDownView(int position, View convertView, ViewGroup parent) {
                 View v = super.getDropDownView(position, convertView, parent);
-                tint((TextView) v, getItem(position)); return v;
+                tint((TextView) v, getItem(position));
+                return v;
             }
+
             private void tint(TextView tv, String value) {
                 if (tv == null) return;
                 tv.setText(value);
                 switch (value) {
-                    case "bajo":  tv.setTextColor(COL_EASY); break;
-                    case "alto":  tv.setTextColor(COL_HARD); break;
-                    default:      tv.setTextColor(COL_MEDIUM); break;
+                    case "bajo":
+                        tv.setTextColor(COL_EASY);
+                        break;
+                    case "alto":
+                        tv.setTextColor(COL_HARD);
+                        break;
+                    default:
+                        tv.setTextColor(COL_MEDIUM);
+                        break;
                 }
             }
         };
         spDificultad.setAdapter(adapter);
         spDificultad.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
                 applyDifficultyExplainer((String) parent.getItemAtPosition(pos));
             }
-            @Override public void onNothingSelected(AdapterView<?> parent) { }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
         });
 
         btnCrearCuenta.setOnClickListener(v -> registrar());
     }
 
     private void applyDifficultyExplainer(String dif) {
-        int color; String titulo; String detalle;
+        int color;
+        String titulo;
+        String detalle;
         switch (dif) {
             case "bajo":
-                color = COL_EASY; titulo = "Fácil (verde)";
+                color = COL_EASY;
+                titulo = "Fácil (verde)";
                 detalle = "Metas más bajas, crecimiento 1.1x por nivel.";
                 break;
             case "alto":
-                color = COL_HARD; titulo = "Difícil (rojo)";
+                color = COL_HARD;
+                titulo = "Difícil (rojo)";
                 detalle = "Metas más altas, crecimiento 1.3x por nivel.";
                 break;
             default:
-                color = COL_MEDIUM; titulo = "Medio (amarillo)";
+                color = COL_MEDIUM;
+                titulo = "Medio (amarillo)";
                 detalle = "Equilibrado, crecimiento 1.2x por nivel.";
         }
         tvDifTitulo.setText(titulo);
@@ -125,9 +145,9 @@ public class RegisterActivity extends AppCompatActivity {
 
     private void registrar() {
         String nombre = etNombre.getText().toString().trim();
-        String email  = etEmail.getText().toString().trim();
-        String pass   = etPassword.getText().toString().trim();
-        String dif    = (String) spDificultad.getSelectedItem();
+        String email = etEmail.getText().toString().trim();
+        String pass = etPassword.getText().toString().trim();
+        String dif = (String) spDificultad.getSelectedItem();
 
         if (nombre.isEmpty()) {
             Toast.makeText(this, "Indicá tu nombre.", Toast.LENGTH_SHORT).show();
@@ -141,11 +161,13 @@ public class RegisterActivity extends AppCompatActivity {
                     v -> repo.addStarterPackIfMissing(
                             onboardingUid,
                             vv -> {
-                                initLocalPrefsFor(onboardingUid); // evita heredar pasos
+                                initLocalPrefsFor(onboardingUid);
                                 saveSessionAndGo(onboardingUid, nombre);
                             },
-                            e2 -> { btnCrearCuenta.setEnabled(true);
-                                Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show(); }
+                            e2 -> {
+                                btnCrearCuenta.setEnabled(true);
+                                Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show();
+                            }
                     ),
                     e -> {
                         btnCrearCuenta.setEnabled(true);
@@ -170,11 +192,13 @@ public class RegisterActivity extends AppCompatActivity {
                                 v -> repo.addStarterPackIfMissing(
                                         uid,
                                         vv -> {
-                                            initLocalPrefsFor(uid); // configura prefs por usuario en 0
+                                            initLocalPrefsFor(uid);
                                             saveSessionAndGo(uid, nombre);
                                         },
-                                        e2 -> { btnCrearCuenta.setEnabled(true);
-                                            Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show(); }
+                                        e2 -> {
+                                            btnCrearCuenta.setEnabled(true);
+                                            Toast.makeText(this, "Starter pack: " + e2.getMessage(), Toast.LENGTH_LONG).show();
+                                        }
                                 ),
                                 e -> {
                                     btnCrearCuenta.setEnabled(true);

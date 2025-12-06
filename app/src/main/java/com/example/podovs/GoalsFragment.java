@@ -108,7 +108,7 @@ public class GoalsFragment extends DialogFragment {
         repo.getUser(uid, snap -> {
             if (snap == null || !snap.exists() || !isAdded()) return;
 
-            long metaDaily  = getNestedLong(snap, "usu_stats.meta_diaria_pasos", 8000L);
+            long metaDaily = getNestedLong(snap, "usu_stats.meta_diaria_pasos", 8000L);
             long metaWeekly = getNestedLong(snap, "usu_stats.meta_semanal_pasos", 56000L);
 
             long stepsTodayRaw = StepsPrefs.todaySteps(requireContext());

@@ -76,25 +76,26 @@ public class ShopActivity extends AppCompatActivity {
 
     private static final int PRICE_BRONZE = 10000;
     private static final int PRICE_SILVER = 25000;
-    private static final int PRICE_GOLD   = 50000;
+    private static final int PRICE_GOLD = 50000;
 
-    private static final int POOL_BRONZE  = 20000;
-    private static final int POOL_SILVER  = 50000;
-    private static final int POOL_GOLD    = 100000;
+    private static final int POOL_BRONZE = 20000;
+    private static final int POOL_SILVER = 50000;
+    private static final int POOL_GOLD = 100000;
 
     // Paleta
-    private static final int COL_BG_CARD      = Color.parseColor("#F3F4F6");
-    private static final int COL_TEXT_DARK    = Color.parseColor("#111827");
-    private static final int COL_TEXT_MEDIUM  = Color.parseColor("#4B5563");
-    private static final int COL_BTN_LILAC    = Color.parseColor("#8B5CF6");
+    private static final int COL_BG_CARD = Color.parseColor("#F3F4F6");
+    private static final int COL_TEXT_DARK = Color.parseColor("#111827");
+    private static final int COL_TEXT_MEDIUM = Color.parseColor("#4B5563");
+    private static final int COL_BTN_LILAC = Color.parseColor("#8B5CF6");
     private static final int COL_BTN_DISABLED = Color.parseColor("#9CA3AF");
-    private static final int COL_BTN_GREEN    = Color.parseColor("#22C55E");
+    private static final int COL_BTN_GREEN = Color.parseColor("#22C55E");
 
     // Rotación 3h
     private long lastSeed = -1L;
     private Handler handler;
     private final Runnable ticker = new Runnable() {
-        @Override public void run() {
+        @Override
+        public void run() {
             updateCountdown();
             long s = computedSeed();
             if (s != lastSeed) {
@@ -105,9 +106,9 @@ public class ShopActivity extends AppCompatActivity {
         }
     };
 
-    private static final String PREF_SHOP  = "shop_rotation_local";
-    private static final String KEY_SEED   = "rot_seed";
-    private static final String KEY_IDS    = "rot_ids";
+    private static final String PREF_SHOP = "shop_rotation_local";
+    private static final String KEY_SEED = "rot_seed";
+    private static final String KEY_IDS = "rot_ids";
 
     // ======= Ads recompensados (cofre 10k) =======
     private static final String REWARDED_AD_UNIT_ID_BRONZE =
@@ -120,7 +121,7 @@ public class ShopActivity extends AppCompatActivity {
 
     private static final String PREF_REWARDED_BRONZE = "shop_rewarded_bronze";
     private static final String KEY_DAY_INDEX = "day_index";
-    private static final String KEY_COUNT     = "count";
+    private static final String KEY_COUNT = "count";
     private static final int MAX_BRONZE_ADS_PER_DAY = 3;
 
     private Button btnBronzeChest;
@@ -131,27 +132,30 @@ public class ShopActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_shop);
 
-        db   = FirebaseFirestore.getInstance();
+        db = FirebaseFirestore.getInstance();
         repo = new FirestoreRepo();
 
         SharedPreferences sp = getSharedPreferences("session", MODE_PRIVATE);
         uid = sp.getString("uid", null);
-        if (uid == null) { finish(); return; }
+        if (uid == null) {
+            finish();
+            return;
+        }
 
-        tvCoins         = findViewById(R.id.tvCoinsShop);
-        rowDailyShop    = findViewById(R.id.rowDailyShop);
-        rowChests       = findViewById(R.id.rowChests);
-        gridEventos     = findViewById(R.id.gridEventos);
+        tvCoins = findViewById(R.id.tvCoinsShop);
+        rowDailyShop = findViewById(R.id.rowDailyShop);
+        rowChests = findViewById(R.id.rowChests);
+        gridEventos = findViewById(R.id.gridEventos);
         tvRotationTitle = findViewById(R.id.tvRotationTitle);
         tvRotationTimer = findViewById(R.id.tvRotationTimer);
 
         sectionRotation = findViewById(R.id.sectionRotation);
-        sectionChests   = findViewById(R.id.sectionChests);
-        sectionEvents   = findViewById(R.id.sectionEvents);
+        sectionChests = findViewById(R.id.sectionChests);
+        sectionEvents = findViewById(R.id.sectionEvents);
 
-        attachRain(sectionRotation, R.drawable.icon_bag,   0xFFE6F7EC);
-        attachRain(sectionChests,   R.drawable.icon_chest, 0xFFFFF4CC);
-        attachRain(sectionEvents,   R.drawable.icon_event, 0xFFE5F0FF);
+        attachRain(sectionRotation, R.drawable.icon_bag, 0xFFE6F7EC);
+        attachRain(sectionChests, R.drawable.icon_chest, 0xFFFFF4CC);
+        attachRain(sectionEvents, R.drawable.icon_event, 0xFFE5F0FF);
 
         repo.listenUser(uid, (snap, err) -> {
             if (err != null || snap == null || !snap.exists()) return;
@@ -160,7 +164,8 @@ public class ShopActivity extends AppCompatActivity {
         });
 
         // Inicializar AdMob
-        MobileAds.initialize(this, status -> {});
+        MobileAds.initialize(this, status -> {
+        });
         loadRewardedBronzeAd();
 
         lastSeed = computedSeed();
@@ -170,9 +175,9 @@ public class ShopActivity extends AppCompatActivity {
 
         ImageButton btnHome = findViewById(R.id.btnHome);
         ImageButton btnShop = findViewById(R.id.btnShop);
-        ImageButton btnVs   = findViewById(R.id.btnVs);
-        ImageButton btnEvt  = findViewById(R.id.btnEvents);
-        ImageButton btnLb   = findViewById(R.id.btnLeaderboards);
+        ImageButton btnVs = findViewById(R.id.btnVs);
+        ImageButton btnEvt = findViewById(R.id.btnEvents);
+        ImageButton btnLb = findViewById(R.id.btnLeaderboards);
 
         btnHome.setOnClickListener(v -> {
             startActivity(new Intent(this, MainActivity.class));
@@ -216,7 +221,9 @@ public class ShopActivity extends AppCompatActivity {
     // ==================== Rotación ====================
     private static final long SLOT_MS = 3L * 60L * 60L * 1000L;
 
-    private long rotationSeed() { return System.currentTimeMillis() / SLOT_MS; }
+    private long rotationSeed() {
+        return System.currentTimeMillis() / SLOT_MS;
+    }
 
     private long computedSeed() {
         long slot = rotationSeed();
@@ -239,8 +246,11 @@ public class ShopActivity extends AppCompatActivity {
     }
 
     private void safeNavigate(String className, String msgIfMissing) {
-        try { startActivity(new Intent(this, Class.forName(className))); }
-        catch (ClassNotFoundException e) { Toast.makeText(this, msgIfMissing, Toast.LENGTH_SHORT).show(); }
+        try {
+            startActivity(new Intent(this, Class.forName(className)));
+        } catch (ClassNotFoundException e) {
+            Toast.makeText(this, msgIfMissing, Toast.LENGTH_SHORT).show();
+        }
     }
 
     // ==================== Ofertas ====================
@@ -288,7 +298,8 @@ public class ShopActivity extends AppCompatActivity {
         rowDailyShop.removeAllViews();
 
         ArrayList<String> clean = new ArrayList<>();
-        for (String s : ids == null ? new String[0] : ids) if (!TextUtils.isEmpty(s)) clean.add(s.trim());
+        for (String s : ids == null ? new String[0] : ids)
+            if (!TextUtils.isEmpty(s)) clean.add(s.trim());
         if (clean.isEmpty()) return;
         if (clean.size() > 3) clean = new ArrayList<>(clean.subList(0, 3));
 
@@ -326,7 +337,10 @@ public class ShopActivity extends AppCompatActivity {
 
     private byte[] longToBytes(long l) {
         byte[] b = new byte[8];
-        for (int i = 7; i >= 0; i--) { b[i] = (byte) (l & 0xFF); l >>= 8; }
+        for (int i = 7; i >= 0; i--) {
+            b[i] = (byte) (l & 0xFF);
+            l >>= 8;
+        }
         return b;
     }
 
@@ -335,7 +349,7 @@ public class ShopActivity extends AppCompatActivity {
         rowChests.removeAllViews();
         rowChests.addView(makeChestCard(PRICE_BRONZE, POOL_BRONZE, FirestoreRepo.CHEST_T1));
         rowChests.addView(makeChestCard(PRICE_SILVER, POOL_SILVER, FirestoreRepo.CHEST_T2));
-        rowChests.addView(makeChestCard(PRICE_GOLD,   POOL_GOLD,   FirestoreRepo.CHEST_T3));
+        rowChests.addView(makeChestCard(PRICE_GOLD, POOL_GOLD, FirestoreRepo.CHEST_T3));
     }
 
     private View makeChestCard(int price, int poolPrice, int tier) {
@@ -432,7 +446,9 @@ public class ShopActivity extends AppCompatActivity {
                     List<DocumentSnapshot> pool = qs.getDocuments();
                     if (pool.isEmpty()) {
                         if (chestPrice > 0) {
-                            repo.addSaldo(uid, chestPrice, vv -> {}, ee -> {});
+                            repo.addSaldo(uid, chestPrice, vv -> {
+                            }, ee -> {
+                            });
                         }
                         Toast.makeText(this, "Sin premios disponibles.", Toast.LENGTH_SHORT).show();
                         return;
@@ -465,7 +481,9 @@ public class ShopActivity extends AppCompatActivity {
                                             },
                                             e2 -> {
                                                 if (chestPrice > 0) {
-                                                    repo.addSaldo(uid, chestPrice, v3 -> {}, e3 -> {});
+                                                    repo.addSaldo(uid, chestPrice, v3 -> {
+                                                    }, e3 -> {
+                                                    });
                                                 }
                                                 Toast.makeText(this, "Error al entregar.", Toast.LENGTH_LONG).show();
                                             });
@@ -474,7 +492,9 @@ public class ShopActivity extends AppCompatActivity {
                 })
                 .addOnFailureListener(e -> {
                     if (chestPrice > 0) {
-                        repo.addSaldo(uid, chestPrice, vv -> {}, ee -> {});
+                        repo.addSaldo(uid, chestPrice, vv -> {
+                        }, ee -> {
+                        });
                     }
                     Toast.makeText(this, "Error cargando premios.", Toast.LENGTH_SHORT).show();
                 });
@@ -687,12 +707,12 @@ public class ShopActivity extends AppCompatActivity {
         lpBtn.setMargins(0, dp(8), 0, 0);
         btn.setLayoutParams(lpBtn);
 
-        String cosId   = d.getId();
+        String cosId = d.getId();
         String cosName = d.getString("cos_nombre") == null ? "" : d.getString("cos_nombre");
-        Long   cosPrice= d.getLong("cos_precio");
-        String asset   = d.getString("cos_asset");
-        String aType   = d.getString("cos_assetType");
-        String tipo    = d.getString("cos_tipo");
+        Long cosPrice = d.getLong("cos_precio");
+        String asset = d.getString("cos_asset");
+        String aType = d.getString("cos_assetType");
+        String tipo = d.getString("cos_tipo");
 
         name.setText(cosName);
         price.setText(cosPrice == null ? "-" : String.format(Locale.getDefault(), "%,d", cosPrice));
@@ -771,12 +791,12 @@ public class ShopActivity extends AppCompatActivity {
         lpBtn.setMargins(0, dp(8), 0, 0);
         btn.setLayoutParams(lpBtn);
 
-        String cosId   = d.getId();
+        String cosId = d.getId();
         String cosName = d.getString("cos_nombre") == null ? "" : d.getString("cos_nombre");
-        Long   cosPrice= d.getLong("cos_precio");
-        String asset   = d.getString("cos_asset");
-        String aType   = d.getString("cos_assetType");
-        String tipo    = d.getString("cos_tipo");
+        Long cosPrice = d.getLong("cos_precio");
+        String asset = d.getString("cos_asset");
+        String aType = d.getString("cos_assetType");
+        String tipo = d.getString("cos_tipo");
 
         name.setText(cosName);
         price.setText(cosPrice == null ? "-" : String.format(Locale.getDefault(), "%,d", cosPrice));
@@ -793,7 +813,8 @@ public class ShopActivity extends AppCompatActivity {
                     : android.R.drawable.ic_menu_report_image);
         }
 
-        if (!owned) btn.setOnClickListener(v -> tryBuy(cosId, tipo, cosPrice == null ? 0L : cosPrice));
+        if (!owned)
+            btn.setOnClickListener(v -> tryBuy(cosId, tipo, cosPrice == null ? 0L : cosPrice));
 
         root.addView(imgCard);
         root.addView(name);
@@ -825,8 +846,8 @@ public class ShopActivity extends AppCompatActivity {
         View view = LayoutInflater.from(this).inflate(R.layout.fragment_newitem, null, false);
 
         ImageView iv = view.findViewById(getIdOrFallback(view, "ivNewItem", android.R.id.icon));
-        TextView  tvTitle = view.findViewById(getIdOrFallback(view, "tvTitle", android.R.id.title));
-        TextView  tvSubtitle = view.findViewById(getIdOrFallback(view, "tvSubtitle", 0));
+        TextView tvTitle = view.findViewById(getIdOrFallback(view, "tvTitle", android.R.id.title));
+        TextView tvSubtitle = view.findViewById(getIdOrFallback(view, "tvSubtitle", 0));
         Button btn = view.findViewById(getIdOrFallback(view, "btnPrimary", android.R.id.button1));
 
         if (tvTitle != null) tvTitle.setText(isNew ? "¡Nuevo cosmético!" : "Cosmético repetido");
@@ -861,7 +882,10 @@ public class ShopActivity extends AppCompatActivity {
         if (id == 0) return fallback;
         return id;
     }
-    private int dp(int v) { return (int) (v * getResources().getDisplayMetrics().density); }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density);
+    }
 
     // ===== Fondo animado =====
     private void attachRain(ViewGroup container, int iconRes, int pastelBackground) {
@@ -891,9 +915,20 @@ public class ShopActivity extends AppCompatActivity {
         private long travelMs = 4500;
         private int bucketCount = 12;
 
-        public RainView(android.content.Context ctx) { super(ctx); init(); }
-        public RainView(android.content.Context ctx, @Nullable AttributeSet a) { super(ctx, a); init(); }
-        public RainView(android.content.Context ctx, @Nullable AttributeSet a, int s) { super(ctx, a, s); init(); }
+        public RainView(android.content.Context ctx) {
+            super(ctx);
+            init();
+        }
+
+        public RainView(android.content.Context ctx, @Nullable AttributeSet a) {
+            super(ctx, a);
+            init();
+        }
+
+        public RainView(android.content.Context ctx, @Nullable AttributeSet a, int s) {
+            super(ctx, a, s);
+            init();
+        }
 
         private void init() {
             setWillNotDraw(false);
@@ -937,7 +972,9 @@ public class ShopActivity extends AppCompatActivity {
             }
         }
 
-        private float dp(float v) { return v * getResources().getDisplayMetrics().density; }
+        private float dp(float v) {
+            return v * getResources().getDisplayMetrics().density;
+        }
 
         private Drop randomDrop(int w, int h, float x0, float x1, boolean anywhereY) {
             Drop d = new Drop();

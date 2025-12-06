@@ -36,9 +36,9 @@ import java.util.HashMap;
 public class ProfileFragment extends BottomSheetDialogFragment {
 
     // Args
-    private static final String ARG_UID   = "arg_uid";
-    private static final String ARG_NAME  = "arg_name";
-    private static final String ARG_EDIT  = "arg_editable";
+    private static final String ARG_UID = "arg_uid";
+    private static final String ARG_NAME = "arg_name";
+    private static final String ARG_EDIT = "arg_editable";
 
     public static ProfileFragment newInstanceForUser(@NonNull String uid,
                                                      @Nullable String displayName,
@@ -64,13 +64,10 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     private TextView tvStat2Title, tvStat2Value;
     private ImageButton btnEdit2;
 
-    // Repo / sesión
     private FirestoreRepo repo;
     private FirebaseFirestore db;
 
-    // uid de la sesión (YO)
     private String myUid = null;
-    // uid del perfil que se está mostrando
     private String profileUid = null;
     private boolean isOwner = false;
     private boolean isEditable = false;
@@ -82,14 +79,10 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
     private static final int XP_CAP = 100;
 
-    // (Opcional) offsets finos por cosmético. Y<0 sube.
     private static final Map<String, int[]> OFFSETS = new HashMap<>();
-    static {
-        // OFFSETS.put("cos_id_7", new int[]{0, -2}); // ejemplo
-    }
 
-    // Métricas tarjetas
     private static final LinkedHashMap<String, String> METRIC_TITLES = new LinkedHashMap<>();
+
     static {
         METRIC_TITLES.put("usu_stats.km_total", "Km recorridos");
         METRIC_TITLES.put("usu_stats.objetos_comprados", "Objetos comprados");
@@ -100,7 +93,8 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         METRIC_TITLES.put("usu_stats.mejor_posicion", "Mejor posición");
     }
 
-    public ProfileFragment() {}
+    public ProfileFragment() {
+    }
 
     @Nullable
     @Override
@@ -115,18 +109,18 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         super.onViewCreated(v, savedInstanceState);
 
         ivAvatar = v.findViewById(R.id.ivAvatarLarge);
-        tvName   = v.findViewById(R.id.tvUserName);
-        tvLevel  = v.findViewById(R.id.tvLevel);
-        pbXp     = v.findViewById(R.id.pbXp);
+        tvName = v.findViewById(R.id.tvUserName);
+        tvLevel = v.findViewById(R.id.tvLevel);
+        pbXp = v.findViewById(R.id.pbXp);
         tvXpHint = v.findViewById(R.id.tvXpHint);
 
         tvStat1Title = v.findViewById(R.id.tvStat1Title);
         tvStat1Value = v.findViewById(R.id.tvStat1Value);
-        btnEdit1     = v.findViewById(R.id.btnEdit1);
+        btnEdit1 = v.findViewById(R.id.btnEdit1);
 
         tvStat2Title = v.findViewById(R.id.tvStat2Title);
         tvStat2Value = v.findViewById(R.id.tvStat2Value);
-        btnEdit2     = v.findViewById(R.id.btnEdit2);
+        btnEdit2 = v.findViewById(R.id.btnEdit2);
 
         ImageButton btnClose = v.findViewById(R.id.btnCloseSheet);
         btnClose.setOnClickListener(view -> dismiss());
@@ -158,7 +152,7 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         }
 
         repo = new FirestoreRepo();
-        db   = FirebaseFirestore.getInstance();
+        db = FirebaseFirestore.getInstance();
 
         loadHeaderAndCards();
 
@@ -197,7 +191,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         String default1 = "usu_stats.km_total";
         String default2 = "usu_stats.objetos_comprados";
 
-        // Lo que tenga guardado el usuario en Firestore (para que otros lo vean)
         String chosen1Server = snap.getString("usu_chosen1Key");
         String chosen2Server = snap.getString("usu_chosen2Key");
 
@@ -282,7 +275,7 @@ public class ProfileFragment extends BottomSheetDialogFragment {
                     SharedPreferences sp = requireContext()
                             .getSharedPreferences(PREFS_PROFILE, Context.MODE_PRIVATE);
                     if (slot == 1) sp.edit().putString(KEY_SLOT1, chosenKey).apply();
-                    else           sp.edit().putString(KEY_SLOT2, chosenKey).apply();
+                    else sp.edit().putString(KEY_SLOT2, chosenKey).apply();
 
                     pushChosenStatsToServer();
                     loadHeaderAndCards();
@@ -308,11 +301,11 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
     // ===================== AVATAR =====================
     private void renderAvatarFromUserSnapshot(DocumentSnapshot snap) {
-        String pielId     = asString(snap.get("usu_equipped.usu_piel"));
+        String pielId = asString(snap.get("usu_equipped.usu_piel"));
         String pantalonId = asString(snap.get("usu_equipped.usu_pantalon"));
-        String remeraId   = asString(snap.get("usu_equipped.usu_remera"));
-        String zapasId    = asString(snap.get("usu_equipped.usu_zapas"));
-        String cabezaId   = asString(snap.get("usu_equipped.usu_cabeza"));
+        String remeraId = asString(snap.get("usu_equipped.usu_remera"));
+        String zapasId = asString(snap.get("usu_equipped.usu_zapas"));
+        String cabezaId = asString(snap.get("usu_equipped.usu_cabeza"));
 
         if (pielId == null && pantalonId == null && remeraId == null
                 && zapasId == null && cabezaId == null) {
@@ -384,7 +377,10 @@ public class ProfileFragment extends BottomSheetDialogFragment {
 
     private void loadAllDrawables(ArrayList<LayerReq> reqs, OnLayersReady cb) {
         ArrayList<Layer> result = new ArrayList<>();
-        if (reqs.isEmpty()) { cb.onReady(result); return; }
+        if (reqs.isEmpty()) {
+            cb.onReady(result);
+            return;
+        }
 
         final int total = reqs.size();
         final int[] count = {0};
@@ -429,29 +425,61 @@ public class ProfileFragment extends BottomSheetDialogFragment {
         }
     }
 
-    private interface OnLayersReady { void onReady(ArrayList<Layer> layers); }
+    private interface OnLayersReady {
+        void onReady(ArrayList<Layer> layers);
+    }
 
     private static class LayerReq {
         final String asset;
         final int offX;
         final int offY;
-        LayerReq(String a, int x, int y) { asset = a; offX = x; offY = y; }
+
+        LayerReq(String a, int x, int y) {
+            asset = a;
+            offX = x;
+            offY = y;
+        }
     }
 
     private static class Layer {
         final Drawable drawable;
         final int offX;
         final int offY;
-        Layer(Drawable d, int x, int y) { drawable = d; offX = x; offY = y; }
+
+        Layer(Drawable d, int x, int y) {
+            drawable = d;
+            offX = x;
+            offY = y;
+        }
     }
 
     private static class EmptyDrawable extends Drawable {
-        @Override public void draw(@NonNull Canvas canvas) {}
-        @Override public void setAlpha(int alpha) {}
-        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
-        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSPARENT; }
-        @Override public int getIntrinsicWidth() { return 32; }
-        @Override public int getIntrinsicHeight() { return 48; }
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+        }
+
+        @Override
+        public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {
+        }
+
+        @Override
+        public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSPARENT;
+        }
+
+        @Override
+        public int getIntrinsicWidth() {
+            return 32;
+        }
+
+        @Override
+        public int getIntrinsicHeight() {
+            return 48;
+        }
     }
 
     // ---------- util de avatar ----------
@@ -472,7 +500,6 @@ public class ProfileFragment extends BottomSheetDialogFragment {
             if (cosId.equals(d.getId())) {
                 Object v = d.get("myc_cache.cos_asset");
                 if (v instanceof String && !((String) v).isEmpty()) {
-                    // puede ser URL o nombre de recurso
                     return (String) v;
                 }
             }
@@ -491,7 +518,9 @@ public class ProfileFragment extends BottomSheetDialogFragment {
     }
 
     // --------- Helpers ---------
-    private int safeInt(Long v, int def) { return (v == null) ? def : v.intValue(); }
+    private int safeInt(Long v, int def) {
+        return (v == null) ? def : v.intValue();
+    }
 
     private long getNestedLong(DocumentSnapshot s, String path, long def) {
         Object v = s.get(path);

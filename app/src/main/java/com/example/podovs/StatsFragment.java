@@ -53,13 +53,13 @@ public class StatsFragment extends Fragment {
                 .getSupportFragmentManager()
                 .popBackStack());
 
-        tvKmTotales            = v.findViewById(R.id.tvKmTotales);
-        tvCarrerasGanadas      = v.findViewById(R.id.tvCarrerasGanadas);
-        tvObjetosComprados     = v.findViewById(R.id.tvObjetosComprados);
-        tvEventosParticipados  = v.findViewById(R.id.tvEventosParticipados);
+        tvKmTotales = v.findViewById(R.id.tvKmTotales);
+        tvCarrerasGanadas = v.findViewById(R.id.tvCarrerasGanadas);
+        tvObjetosComprados = v.findViewById(R.id.tvObjetosComprados);
+        tvEventosParticipados = v.findViewById(R.id.tvEventosParticipados);
         tvMejorPosicionMensual = v.findViewById(R.id.tvMejorPosicionMensual);
-        tvMetasDiariasOk       = v.findViewById(R.id.tvMetasDiariasOk);
-        tvMetasSemanalesOk     = v.findViewById(R.id.tvMetasSemanalesOk);
+        tvMetasDiariasOk = v.findViewById(R.id.tvMetasDiariasOk);
+        tvMetasSemanalesOk = v.findViewById(R.id.tvMetasSemanalesOk);
 
         uid = requireContext()
                 .getSharedPreferences("session", Context.MODE_PRIVATE)
@@ -115,7 +115,7 @@ public class StatsFragment extends Fragment {
         long objetosComprados = getLong(snap, "usu_stats.objetos_comprados", 0L);
         tvObjetosComprados.setText(String.valueOf(objetosComprados));
 
-        long metasDiariasOk  = getLong(snap, "usu_stats.metas_diarias_total", 0L);
+        long metasDiariasOk = getLong(snap, "usu_stats.metas_diarias_total", 0L);
         long metasSemanalesOk = getLong(snap, "usu_stats.metas_semana_total", 0L);
         tvMetasDiariasOk.setText(String.valueOf(metasDiariasOk));
         tvMetasSemanalesOk.setText(String.valueOf(metasSemanalesOk));

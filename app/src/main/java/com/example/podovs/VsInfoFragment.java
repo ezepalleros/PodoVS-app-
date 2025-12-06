@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
 public class VsInfoFragment extends DialogFragment {
 
     private static final String ARG_VS_ID = "vs_id";
-    private static final String ARG_UID   = "uid";
+    private static final String ARG_UID = "uid";
 
     public static VsInfoFragment newInstance(@NonNull String vsId,
                                              @NonNull String uid) {
@@ -69,23 +69,24 @@ public class VsInfoFragment extends DialogFragment {
                               @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        vsId  = getArguments() != null ? getArguments().getString(ARG_VS_ID) : null;
-        myUid = getArguments() != null ? getArguments().getString(ARG_UID)   : null;
+        vsId = getArguments() != null ? getArguments().getString(ARG_VS_ID) : null;
+        myUid = getArguments() != null ? getArguments().getString(ARG_UID) : null;
         db = FirebaseFirestore.getInstance();
 
-        rootOverlay      = view.findViewById(R.id.rootVsInfoOverlay);
-        card             = view.findViewById(R.id.cardVsInfo);
-        tvTitle          = view.findViewById(R.id.tvVsInfoTitle);
-        tvSubtitle       = view.findViewById(R.id.tvVsInfoSubtitle);
-        tvTarget         = view.findViewById(R.id.tvVsInfoTarget);
-        tvTime           = view.findViewById(R.id.tvVsInfoTime);
-        tvWinner         = view.findViewById(R.id.tvVsInfoWinner);
+        rootOverlay = view.findViewById(R.id.rootVsInfoOverlay);
+        card = view.findViewById(R.id.cardVsInfo);
+        tvTitle = view.findViewById(R.id.tvVsInfoTitle);
+        tvSubtitle = view.findViewById(R.id.tvVsInfoSubtitle);
+        tvTarget = view.findViewById(R.id.tvVsInfoTarget);
+        tvTime = view.findViewById(R.id.tvVsInfoTime);
+        tvWinner = view.findViewById(R.id.tvVsInfoWinner);
         containerPlayers = view.findViewById(R.id.containerVsPlayers);
-        btnClose         = view.findViewById(R.id.btnCloseVsInfo);
+        btnClose = view.findViewById(R.id.btnCloseVsInfo);
         View btnCloseIcon = view.findViewById(R.id.btnCloseIcon);
 
         rootOverlay.setOnClickListener(v -> dismiss());
-        card.setOnClickListener(v -> { });
+        card.setOnClickListener(v -> {
+        });
         btnClose.setOnClickListener(v -> dismiss());
         btnCloseIcon.setOnClickListener(v -> dismiss());
 

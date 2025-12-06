@@ -80,7 +80,8 @@ public class NotificationFragment extends Fragment {
             notifyDataSetChanged();
         }
 
-        @NonNull @Override
+        @NonNull
+        @Override
         public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View row = LayoutInflater.from(parent.getContext())
                     .inflate(android.R.layout.simple_list_item_2, parent, false);
@@ -106,6 +107,7 @@ public class NotificationFragment extends Fragment {
 
         static class VH extends RecyclerView.ViewHolder {
             TextView title, subtitle;
+
             VH(@NonNull View itemView) {
                 super(itemView);
                 title = itemView.findViewById(android.R.id.text1);
@@ -163,30 +165,41 @@ public class NotificationFragment extends Fragment {
                 Method m = obj.getClass().getMethod(method);
                 Object v = m.invoke(obj);
                 return v != null ? v.toString() : null;
-            } catch (Exception ignored) { return null; }
+            } catch (Exception ignored) {
+                return null;
+            }
         }
+
         private static Long tryGetterLong(Object obj, String method) {
             try {
                 Method m = obj.getClass().getMethod(method);
                 Object v = m.invoke(obj);
                 if (v instanceof Number) return ((Number) v).longValue();
                 return v != null ? Long.parseLong(v.toString()) : null;
-            } catch (Exception ignored) { return null; }
+            } catch (Exception ignored) {
+                return null;
+            }
         }
+
         private static String tryFieldString(Object obj, String field) {
             try {
                 Field f = obj.getClass().getField(field);
                 Object v = f.get(obj);
                 return v != null ? v.toString() : null;
-            } catch (Exception ignored) { return null; }
+            } catch (Exception ignored) {
+                return null;
+            }
         }
+
         private static Long tryFieldLong(Object obj, String field) {
             try {
                 Field f = obj.getClass().getField(field);
                 Object v = f.get(obj);
                 if (v instanceof Number) return ((Number) v).longValue();
                 return v != null ? Long.parseLong(v.toString()) : null;
-            } catch (Exception ignored) { return null; }
+            } catch (Exception ignored) {
+                return null;
+            }
         }
     }
 }

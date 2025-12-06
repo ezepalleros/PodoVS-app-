@@ -27,15 +27,17 @@ import java.util.concurrent.TimeUnit;
 
 public class StepsManager {
 
-    public interface Callback { void onStepsUpdated(long stepsToday, double kmHoy); }
+    public interface Callback {
+        void onStepsUpdated(long stepsToday, double kmHoy);
+    }
 
     private static final String SP_NAME = "steps_prefs";
-    private static final String KEY_BASE_PREFIX   = "base_";
-    private static final String KEY_TOTAL_PREFIX  = "total_";
-    private static final String KEY_LAST_COUNTER  = "last_counter";
+    private static final String KEY_BASE_PREFIX = "base_";
+    private static final String KEY_TOTAL_PREFIX = "total_";
+    private static final String KEY_LAST_COUNTER = "last_counter";
     private static final String KEY_LAST_COUNTER_DAY = "last_counter_day";
-    private static final String KEY_RECORD_STEPS  = "record_steps";
-    private static final String KEY_RECORD_DAY    = "record_day";
+    private static final String KEY_RECORD_STEPS = "record_steps";
+    private static final String KEY_RECORD_DAY = "record_day";
 
     private static final double METROS_POR_PASO = 0.78;
 
@@ -58,7 +60,6 @@ public class StepsManager {
 
     private ScheduledExecutorService tickScheduler;
 
-    // ---- Firestore / versus ----
     private FirestoreRepo repo;
     private String userId;
     private FirebaseFirestore fs;
@@ -73,10 +74,10 @@ public class StepsManager {
         this.callback = callback;
 
         sensorManager = (SensorManager) appCtx.getSystemService(Context.SENSOR_SERVICE);
-        stepCounter   = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) : null;
-        stepDetector  = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR) : null;
+        stepCounter = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) : null;
+        stepDetector = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR) : null;
 
-        keyBaseToday  = todayKey(KEY_BASE_PREFIX);
+        keyBaseToday = todayKey(KEY_BASE_PREFIX);
         keyTotalToday = todayKey(KEY_TOTAL_PREFIX);
 
         SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
@@ -106,7 +107,6 @@ public class StepsManager {
         }
     }
 
-    // Versión que integra Firestore y sincroniza todos los versus activos (incluyendo eventos cooperativos)
     public StepsManager(Context context, FirestoreRepo repo, String uid, Callback callback) {
         this(context, callback);
         this.repo = repo;
@@ -143,7 +143,10 @@ public class StepsManager {
         listening = true;
 
         if (wakeLock != null && !wakeLock.isHeld()) {
-            try { wakeLock.acquire(); } catch (Exception ignored) {}
+            try {
+                wakeLock.acquire();
+            } catch (Exception ignored) {
+            }
         }
 
         if (tickScheduler == null || tickScheduler.isShutdown()) {
@@ -166,15 +169,20 @@ public class StepsManager {
         }
 
         if (wakeLock != null && wakeLock.isHeld()) {
-            try { wakeLock.release(); } catch (Exception ignored) {}
+            try {
+                wakeLock.release();
+            } catch (Exception ignored) {
+            }
         }
 
         stopActiveVersusListener();
     }
 
-    public long getStepsToday() { return stepsToday; }
+    public long getStepsToday() {
+        return stepsToday;
+    }
 
-    public double getKmToday()  {
+    public double getKmToday() {
         return round2(stepsToday * METROS_POR_PASO / 1000.0);
     }
 
@@ -186,7 +194,8 @@ public class StepsManager {
     // ================== SENSOR CALLBACK ==================
 
     private final SensorEventListener listener = new SensorEventListener() {
-        @Override public void onSensorChanged(SensorEvent event) {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
             ensureTodayKeys();
 
             SharedPreferences prefs = appCtx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
@@ -195,7 +204,7 @@ public class StepsManager {
                 float totalSinceBoot = event.values[0];
 
                 float lastCounter = prefs.getFloat(KEY_LAST_COUNTER, -1f);
-                String lastDay    = prefs.getString(KEY_LAST_COUNTER_DAY, "");
+                String lastDay = prefs.getString(KEY_LAST_COUNTER_DAY, "");
                 if (lastCounter >= 0f && totalSinceBoot < lastCounter) {
                     float recalib = totalSinceBoot - stepsToday;
                     if (recalib < 0f) recalib = 0f;
@@ -231,7 +240,10 @@ public class StepsManager {
                 emitUpdate();
             }
         }
-        @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
     };
 
     // ================== EMISIÓN / SYNC VERSUS ==================
@@ -293,7 +305,9 @@ public class StepsManager {
 
     // ================== PERSISTENCIA LOCAL ==================
 
-    private String todayKey(String prefix) { return prefix + dayCode(); }
+    private String todayKey(String prefix) {
+        return prefix + dayCode();
+    }
 
     private String dayCode() {
         return new SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(new Date());
@@ -310,7 +324,7 @@ public class StepsManager {
                         .putString(KEY_RECORD_DAY, dayCode())
                         .apply();
             }
-            keyBaseToday  = expectedBase;
+            keyBaseToday = expectedBase;
             keyTotalToday = todayKey(KEY_TOTAL_PREFIX);
             baseOffset = -1f;
             stepsToday = 0L;
@@ -324,5 +338,7 @@ public class StepsManager {
                 .apply();
     }
 
-    private static double round2(double v) { return Math.round(v * 100.0) / 100.0; }
+    private static double round2(double v) {
+        return Math.round(v * 100.0) / 100.0;
+    }
 }

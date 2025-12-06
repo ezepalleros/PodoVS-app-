@@ -58,7 +58,7 @@ public class VersusActivity extends AppCompatActivity {
     private ListenerRegistration versusListener;
 
     private final List<VsRoom> myActive = new ArrayList<>();
-    private final List<VsRoom> others   = new ArrayList<>();
+    private final List<VsRoom> others = new ArrayList<>();
     private final Map<String, OwnerInfo> ownersCache = new HashMap<>();
 
     static class VsRoom {
@@ -79,6 +79,7 @@ public class VersusActivity extends AppCompatActivity {
     static class OwnerInfo {
         final String name;
         final Map<String, Object> equipped;
+
         OwnerInfo(String name, Map<String, Object> equipped) {
             this.name = name;
             this.equipped = equipped;
@@ -100,10 +101,10 @@ public class VersusActivity extends AppCompatActivity {
             return;
         }
 
-        tvAvailable     = findViewById(R.id.tvVsAvailable);
+        tvAvailable = findViewById(R.id.tvVsAvailable);
         containerActive = findViewById(R.id.containerActive);
-        containerRooms  = findViewById(R.id.containerRooms);
-        btnCreateRoom   = findViewById(R.id.btnCreateRoom);
+        containerRooms = findViewById(R.id.containerRooms);
+        btnCreateRoom = findViewById(R.id.btnCreateRoom);
 
         ivEnergy1 = findViewById(R.id.ivEnergy1);
         ivEnergy2 = findViewById(R.id.ivEnergy2);
@@ -111,9 +112,9 @@ public class VersusActivity extends AppCompatActivity {
 
         ImageButton btnHome = findViewById(R.id.btnHome);
         ImageButton btnShop = findViewById(R.id.btnShop);
-        ImageButton btnVs   = findViewById(R.id.btnVs);
-        ImageButton btnEvt  = findViewById(R.id.btnEvents);
-        ImageButton btnLb   = findViewById(R.id.btnLeaderboards);
+        ImageButton btnVs = findViewById(R.id.btnVs);
+        ImageButton btnEvt = findViewById(R.id.btnEvents);
+        ImageButton btnLb = findViewById(R.id.btnLeaderboards);
 
         btnHome.setOnClickListener(v -> {
             startActivity(new Intent(this, MainActivity.class));
@@ -350,7 +351,7 @@ public class VersusActivity extends AppCompatActivity {
     }
 
     private void updateEnergyIcons(int remaining) {
-        int full  = R.drawable.energy_empty;
+        int full = R.drawable.energy_empty;
         int spent = R.drawable.energy_charged;
 
         ImageView[] arr = {ivEnergy1, ivEnergy2, ivEnergy3};
@@ -409,7 +410,7 @@ public class VersusActivity extends AppCompatActivity {
             }
         }
 
-        ImageView myAvatarView    = createMiniAvatarView(48);
+        ImageView myAvatarView = createMiniAvatarView(48);
         ImageView rivalAvatarView = createMiniAvatarView(48);
 
         AvatarMiniRenderer.renderInto(this, db, myAvatarView, uid, null);
@@ -537,7 +538,6 @@ public class VersusActivity extends AppCompatActivity {
         topRow.addView(nameCol);
         topRow.addView(tvLock);
 
-        // botón de cerrar sala sólo para el dueño
         TextView tvClose = new TextView(this);
         tvClose.setText("✕");
         tvClose.setTextSize(18);
@@ -625,7 +625,8 @@ public class VersusActivity extends AppCompatActivity {
                 r.id,
                 uid,
                 null,
-                vsId -> {},
+                vsId -> {
+                },
                 e -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show()
         );
     }
@@ -637,7 +638,8 @@ public class VersusActivity extends AppCompatActivity {
                 roomId,
                 uid,
                 code,
-                vsId -> {},
+                vsId -> {
+                },
                 e -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show()
         );
     }
@@ -647,7 +649,9 @@ public class VersusActivity extends AppCompatActivity {
     private static class AvatarMiniRenderer {
         private static final Map<String, int[]> OFFSETS = new HashMap<>();
         private static final Map<String, Bitmap> AVATAR_CACHE = new HashMap<>();
-        static { }
+
+        static {
+        }
 
         static void renderInto(@NonNull VersusActivity act,
                                @NonNull FirebaseFirestore db,
@@ -688,11 +692,11 @@ public class VersusActivity extends AppCompatActivity {
                                                @NonNull String userId,
                                                @Nullable Map<String, Object> eq) {
 
-            String pielId     = asString(eq != null ? eq.get("usu_piel")      : null);
-            String pantalonId = asString(eq != null ? eq.get("usu_pantalon")  : null);
-            String remeraId   = asString(eq != null ? eq.get("usu_remera")    : null);
-            String zapasId    = asString(eq != null ? eq.get("usu_zapas")     : null);
-            String cabezaId   = asString(eq != null ? eq.get("usu_cabeza")    : null);
+            String pielId = asString(eq != null ? eq.get("usu_piel") : null);
+            String pantalonId = asString(eq != null ? eq.get("usu_pantalon") : null);
+            String remeraId = asString(eq != null ? eq.get("usu_remera") : null);
+            String zapasId = asString(eq != null ? eq.get("usu_zapas") : null);
+            String cabezaId = asString(eq != null ? eq.get("usu_cabeza") : null);
 
             if (pielId == null && pantalonId == null && remeraId == null &&
                     zapasId == null && cabezaId == null) {
@@ -736,23 +740,42 @@ public class VersusActivity extends AppCompatActivity {
             loadAllDrawables(act, reqs, layers -> composeAndShowMini(act, target, layers, userId));
         }
 
-        private interface OnLayersReady { void onReady(ArrayList<Layer> layers); }
+        private interface OnLayersReady {
+            void onReady(ArrayList<Layer> layers);
+        }
 
         private static class LayerReq {
-            final String asset; final int offX; final int offY;
-            LayerReq(String a, int x, int y) { asset=a; offX=x; offY=y; }
+            final String asset;
+            final int offX;
+            final int offY;
+
+            LayerReq(String a, int x, int y) {
+                asset = a;
+                offX = x;
+                offY = y;
+            }
         }
 
         private static class Layer {
-            final Drawable drawable; final int offX; final int offY;
-            Layer(Drawable d, int x, int y) { drawable=d; offX=x; offY=y; }
+            final Drawable drawable;
+            final int offX;
+            final int offY;
+
+            Layer(Drawable d, int x, int y) {
+                drawable = d;
+                offX = x;
+                offY = y;
+            }
         }
 
         private static void loadAllDrawables(@NonNull VersusActivity act,
                                              @NonNull ArrayList<LayerReq> reqs,
                                              @NonNull OnLayersReady cb) {
             ArrayList<Layer> result = new ArrayList<>();
-            if (reqs.isEmpty()) { cb.onReady(result); return; }
+            if (reqs.isEmpty()) {
+                cb.onReady(result);
+                return;
+            }
 
             final int total = reqs.size();
             final int[] count = {0};
@@ -767,7 +790,10 @@ public class VersusActivity extends AppCompatActivity {
                             cb.onReady(result);
                         }
                     }
-                    @Override public void onLoadCleared(@Nullable Drawable placeholder) {}
+
+                    @Override
+                    public void onLoadCleared(@Nullable Drawable placeholder) {
+                    }
                 });
             }
         }
@@ -826,19 +852,39 @@ public class VersusActivity extends AppCompatActivity {
         }
 
         private static class EmptyDrawable extends Drawable {
-            @Override public void draw(@NonNull Canvas canvas) {}
-            @Override public void setAlpha(int alpha) {}
-            @Override public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
-            @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSPARENT; }
-            @Override public int getIntrinsicWidth() { return 32; }
-            @Override public int getIntrinsicHeight() { return 48; }
+            @Override
+            public void draw(@NonNull Canvas canvas) {
+            }
+
+            @Override
+            public void setAlpha(int alpha) {
+            }
+
+            @Override
+            public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {
+            }
+
+            @Override
+            public int getOpacity() {
+                return android.graphics.PixelFormat.TRANSPARENT;
+            }
+
+            @Override
+            public int getIntrinsicWidth() {
+                return 32;
+            }
+
+            @Override
+            public int getIntrinsicHeight() {
+                return 48;
+            }
         }
 
         private static void addReq(QuerySnapshot qs, ArrayList<LayerReq> out, @Nullable String cosId) {
             if (cosId == null) return;
             String asset = findAssetFor(qs, cosId);
             if (asset == null) return;
-            int[] off = OFFSETS.getOrDefault(cosId, new int[]{0,0});
+            int[] off = OFFSETS.getOrDefault(cosId, new int[]{0, 0});
             out.add(new LayerReq(asset, off[0], off[1]));
         }
 
@@ -889,7 +935,10 @@ public class VersusActivity extends AppCompatActivity {
         String rivalId = r.ownerId;
         if (r.players.contains(uid) && r.players.size() > 1) {
             for (String p : r.players) {
-                if (!uid.equals(p)) { rivalId = p; break; }
+                if (!uid.equals(p)) {
+                    rivalId = p;
+                    break;
+                }
             }
         }
 

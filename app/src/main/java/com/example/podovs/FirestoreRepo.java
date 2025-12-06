@@ -44,12 +44,11 @@ public class FirestoreRepo {
 
     public static final int MAX_ACTIVE_VERSUS = 3;
 
-    // Recompensa base por ganar un VS (la fórmula usa pasos / meta, esto solo es por si necesitás algo fijo)
     private static final long VS_WIN_COINS_BASE = 0L;
 
     private static final String[] STARTER_IDS = {
-            "cos_id_1","cos_id_2","cos_id_3","cos_id_4","cos_id_5","cos_id_6","cos_id_7",
-            "cos_id_13","cos_id_14","cos_id_15"
+            "cos_id_1", "cos_id_2", "cos_id_3", "cos_id_4", "cos_id_5", "cos_id_6", "cos_id_7",
+            "cos_id_13", "cos_id_14", "cos_id_15"
     };
     private static final String DEFAULT_SKIN_ID = "cos_id_2";
 
@@ -61,18 +60,31 @@ public class FirestoreRepo {
     private DocumentReference userDoc(@NonNull String uid) {
         return db.collection("users").document(uid);
     }
+
     private DocumentReference cosmeticDoc(@NonNull String cosId) {
         return db.collection("cosmetics").document(cosId);
     }
+
     private DocumentReference inventoryDoc(@NonNull String uid, @NonNull String cosId) {
         return userDoc(uid).collection("my_cosmetics").document(cosId);
     }
 
     // rooms / versus / rankings
-    private CollectionReference roomsCol()   { return db.collection("rooms"); }
-    private CollectionReference versusCol()  { return db.collection("versus"); }
-    private CollectionReference rankingsCol(){ return db.collection("rankings"); }
-    private DocumentReference versusDoc(@NonNull String id) { return versusCol().document(id); }
+    private CollectionReference roomsCol() {
+        return db.collection("rooms");
+    }
+
+    private CollectionReference versusCol() {
+        return db.collection("versus");
+    }
+
+    private CollectionReference rankingsCol() {
+        return db.collection("rankings");
+    }
+
+    private DocumentReference versusDoc(@NonNull String id) {
+        return versusCol().document(id);
+    }
 
     private long currentWeekKey() {
         Calendar cal = Calendar.getInstance();
@@ -106,7 +118,9 @@ public class FirestoreRepo {
     }
 
     @Nullable
-    public FirebaseUser currentUser() { return auth.getCurrentUser(); }
+    public FirebaseUser currentUser() {
+        return auth.getCurrentUser();
+    }
 
     // ---------- User ----------
     public void getUser(@NonNull String uid,
@@ -130,17 +144,17 @@ public class FirestoreRepo {
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("km_semana", 0.0);
-        stats.put("km_total",  0.0);
+        stats.put("km_total", 0.0);
         stats.put("xp", 0L);
         stats.put("objetos_comprados", 0L);
-        stats.put("meta_diaria_pasos",  1000L);
+        stats.put("meta_diaria_pasos", 1000L);
         stats.put("meta_semanal_pasos", 10000L);
-        stats.put("carreras_ganadas",      0L);
-        stats.put("eventos_participados",  0L);
-        stats.put("mejor_posicion",        0L);
-        stats.put("mayor_pasos_dia",       0L);
-        stats.put("metas_diarias_total",   0L);
-        stats.put("metas_semana_total",    0L);
+        stats.put("carreras_ganadas", 0L);
+        stats.put("eventos_participados", 0L);
+        stats.put("mejor_posicion", 0L);
+        stats.put("mayor_pasos_dia", 0L);
+        stats.put("metas_diarias_total", 0L);
+        stats.put("metas_semana_total", 0L);
         stats.put("week_started_at", System.currentTimeMillis());
 
         data.put("usu_stats", stats);
@@ -158,7 +172,6 @@ public class FirestoreRepo {
                 .addOnFailureListener(err);
     }
 
-    /** Garantiza campos, corrige legados y fuerza invariante km_total >= km_semana. */
     public void ensureStats(@NonNull String uid) {
         DocumentReference ref = userDoc(uid);
         ref.get().addOnSuccessListener(snap -> {
@@ -168,18 +181,18 @@ public class FirestoreRepo {
             up.put("usu_stats.metas_diarias_cumplidas", FieldValue.delete());
             up.put("usu_stats.metas_semanales_cumplidas", FieldValue.delete());
             // asegurar actuales
-            ensureMissingDouble(snap, up, "usu_stats.km_semana",          0.0d);
-            ensureMissingDouble(snap, up, "usu_stats.km_total",           0.0d);
-            ensureMissingLong  (snap, up, "usu_stats.xp",                 0L);
-            ensureMissingLong  (snap, up, "usu_stats.objetos_comprados",  0L);
-            ensureMissingLong  (snap, up, "usu_stats.meta_diaria_pasos",  1000L);
-            ensureMissingLong  (snap, up, "usu_stats.meta_semanal_pasos", 10000L);
-            ensureMissingLong  (snap, up, "usu_stats.carreras_ganadas",     0L);
-            ensureMissingLong  (snap, up, "usu_stats.eventos_participados", 0L);
-            ensureMissingLong  (snap, up, "usu_stats.mejor_posicion",       0L);
-            ensureMissingLong  (snap, up, "usu_stats.mayor_pasos_dia",      0L);
-            ensureMissingLong  (snap, up, "usu_stats.metas_diarias_total",  0L);
-            ensureMissingLong  (snap, up, "usu_stats.metas_semana_total",   0L);
+            ensureMissingDouble(snap, up, "usu_stats.km_semana", 0.0d);
+            ensureMissingDouble(snap, up, "usu_stats.km_total", 0.0d);
+            ensureMissingLong(snap, up, "usu_stats.xp", 0L);
+            ensureMissingLong(snap, up, "usu_stats.objetos_comprados", 0L);
+            ensureMissingLong(snap, up, "usu_stats.meta_diaria_pasos", 1000L);
+            ensureMissingLong(snap, up, "usu_stats.meta_semanal_pasos", 10000L);
+            ensureMissingLong(snap, up, "usu_stats.carreras_ganadas", 0L);
+            ensureMissingLong(snap, up, "usu_stats.eventos_participados", 0L);
+            ensureMissingLong(snap, up, "usu_stats.mejor_posicion", 0L);
+            ensureMissingLong(snap, up, "usu_stats.mayor_pasos_dia", 0L);
+            ensureMissingLong(snap, up, "usu_stats.metas_diarias_total", 0L);
+            ensureMissingLong(snap, up, "usu_stats.metas_semana_total", 0L);
             // inicio de semana
             if (!(snap.get("usu_stats.week_started_at") instanceof Number)) {
                 up.put("usu_stats.week_started_at", System.currentTimeMillis());
@@ -240,7 +253,10 @@ public class FirestoreRepo {
     public void addKmDelta(@NonNull String uid, double kmDelta,
                            @NonNull OnSuccessListener<Void> ok,
                            @NonNull OnFailureListener err) {
-        if (kmDelta <= 0) { ok.onSuccess(null); return; }
+        if (kmDelta <= 0) {
+            ok.onSuccess(null);
+            return;
+        }
         DocumentReference ref = userDoc(uid);
         db.runTransaction((Transaction.Function<Void>) tr -> {
             DocumentSnapshot s = tr.get(ref);
@@ -253,7 +269,7 @@ public class FirestoreRepo {
             if (nuevoTot < nuevoSem) nuevoTot = nuevoSem;
             Map<String, Object> up = new HashMap<>();
             up.put("usu_stats.km_semana", nuevoSem);
-            up.put("usu_stats.km_total",  nuevoTot);
+            up.put("usu_stats.km_total", nuevoTot);
             tr.update(ref, up);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
@@ -274,7 +290,7 @@ public class FirestoreRepo {
     private double difMultiplier(@NonNull String dif) {
         String d = dif.toLowerCase(Locale.ROOT);
         if (d.contains("dificil") || d.contains("difícil") || d.contains("alto")) return 0.3;
-        if (d.contains("medio")  || d.contains("normal")) return 0.2;
+        if (d.contains("medio") || d.contains("normal")) return 0.2;
         return 0.1;
     }
 
@@ -301,11 +317,11 @@ public class FirestoreRepo {
             DocumentSnapshot s = tr.get(ref);
             Long lvlL = s.getLong("usu_nivel");
             int nivel = (lvlL == null) ? 1 : lvlL.intValue();
-            long diaria  = dailyFor(nivel, dificultad);
+            long diaria = dailyFor(nivel, dificultad);
             long semanal = weeklyFor(nivel, dificultad);
-            Map<String,Object> m = new HashMap<>();
+            Map<String, Object> m = new HashMap<>();
             m.put("usu_difi", dificultad.toLowerCase(Locale.ROOT));
-            m.put("usu_stats.meta_diaria_pasos",  diaria);
+            m.put("usu_stats.meta_diaria_pasos", diaria);
             m.put("usu_stats.meta_semanal_pasos", semanal);
             tr.update(ref, m);
             return null;
@@ -330,12 +346,12 @@ public class FirestoreRepo {
 
             Long lvlL = s.getLong("usu_nivel");
             int nivel = (lvlL == null) ? 1 : lvlL.intValue();
-            long diaria  = dailyFor(nivel, nuevaDifi);
+            long diaria = dailyFor(nivel, nuevaDifi);
             long semanal = weeklyFor(nivel, nuevaDifi);
 
-            Map<String,Object> up = new HashMap<>();
+            Map<String, Object> up = new HashMap<>();
             up.put("usu_difi", nuevaDifi.toLowerCase(Locale.ROOT));
-            up.put("usu_stats.meta_diaria_pasos",  diaria);
+            up.put("usu_stats.meta_diaria_pasos", diaria);
             up.put("usu_stats.meta_semanal_pasos", semanal);
             up.put("usu_difi_changed_at", now);
 
@@ -349,7 +365,7 @@ public class FirestoreRepo {
                                    @NonNull OnFailureListener err) {
         db.runTransaction((Transaction.Function<Void>) tr -> {
             DocumentReference ref = userDoc(uid);
-            Map<String,Object> up = new HashMap<>();
+            Map<String, Object> up = new HashMap<>();
             up.put("usu_nivel", 1);
             up.put("usu_stats.meta_diaria_pasos", 1000L);
             up.put("usu_stats.meta_semanal_pasos", 10000L);
@@ -374,13 +390,17 @@ public class FirestoreRepo {
             long nuevoXp = Math.max(0L, xp);
             int nuevoNivel = Math.max(1, nivel);
             boolean leveleo = false;
-            while (nuevoXp >= XP_PER_LEVEL) { nuevoXp -= XP_PER_LEVEL; nuevoNivel++; leveleo = true; }
+            while (nuevoXp >= XP_PER_LEVEL) {
+                nuevoXp -= XP_PER_LEVEL;
+                nuevoNivel++;
+                leveleo = true;
+            }
 
-            Map<String,Object> up = new HashMap<>();
-            if (nuevoXp != xp)    up.put("usu_stats.xp", nuevoXp);
+            Map<String, Object> up = new HashMap<>();
+            if (nuevoXp != xp) up.put("usu_stats.xp", nuevoXp);
             if (nuevoNivel != nivel) up.put("usu_nivel", nuevoNivel);
             if (leveleo) {
-                up.put("usu_stats.meta_diaria_pasos",  dailyFor(nuevoNivel, dif));
+                up.put("usu_stats.meta_diaria_pasos", dailyFor(nuevoNivel, dif));
                 up.put("usu_stats.meta_semanal_pasos", weeklyFor(nuevoNivel, dif));
             }
 
@@ -415,17 +435,21 @@ public class FirestoreRepo {
             long nuevoXp = Math.max(0, xp + xpDelta);
             int nuevoNivel = nivel;
             boolean leveleo = false;
-            while (nuevoXp >= XP_PER_LEVEL) { nuevoXp -= XP_PER_LEVEL; nuevoNivel++; leveleo = true; }
+            while (nuevoXp >= XP_PER_LEVEL) {
+                nuevoXp -= XP_PER_LEVEL;
+                nuevoNivel++;
+                leveleo = true;
+            }
 
             Map<String, Object> up = new HashMap<>();
             up.put("usu_saldo", nuevoSaldo);
             up.put("usu_nivel", nuevoNivel);
             up.put("usu_stats.xp", nuevoXp);
-            if (incDailyCounter)  up.put("usu_stats.metas_diarias_total", FieldValue.increment(1));
-            if (incWeeklyCounter) up.put("usu_stats.metas_semana_total",  FieldValue.increment(1));
+            if (incDailyCounter) up.put("usu_stats.metas_diarias_total", FieldValue.increment(1));
+            if (incWeeklyCounter) up.put("usu_stats.metas_semana_total", FieldValue.increment(1));
 
             if (leveleo) {
-                up.put("usu_stats.meta_diaria_pasos",  dailyFor(nuevoNivel, dif));
+                up.put("usu_stats.meta_diaria_pasos", dailyFor(nuevoNivel, dif));
                 up.put("usu_stats.meta_semanal_pasos", weeklyFor(nuevoNivel, dif));
             }
 
@@ -441,7 +465,6 @@ public class FirestoreRepo {
 
     public void claimWeekly(@NonNull String uid, long coins, @NonNull OnSuccessListener<Void> ok,
                             @NonNull OnFailureListener err) {
-        // Reinicia ciclo semanal al reclamar
         db.runTransaction((Transaction.Function<Void>) tr -> {
             DocumentReference ref = userDoc(uid);
             DocumentSnapshot s = tr.get(ref);
@@ -459,9 +482,13 @@ public class FirestoreRepo {
 
             int nuevoNivel = nivel;
             boolean leveleo = false;
-            while (nuevoXp >= XP_PER_LEVEL) { nuevoXp -= XP_PER_LEVEL; nuevoNivel++; leveleo = true; }
+            while (nuevoXp >= XP_PER_LEVEL) {
+                nuevoXp -= XP_PER_LEVEL;
+                nuevoNivel++;
+                leveleo = true;
+            }
 
-            Map<String,Object> up = new HashMap<>();
+            Map<String, Object> up = new HashMap<>();
             up.put("usu_saldo", nuevoSaldo);
             up.put("usu_stats.xp", nuevoXp);
             up.put("usu_nivel", nuevoNivel);
@@ -469,7 +496,7 @@ public class FirestoreRepo {
             up.put("usu_stats.km_semana", 0.0);
             up.put("usu_stats.week_started_at", System.currentTimeMillis());
             if (leveleo) {
-                up.put("usu_stats.meta_diaria_pasos",  dailyFor(nuevoNivel, dif));
+                up.put("usu_stats.meta_diaria_pasos", dailyFor(nuevoNivel, dif));
                 up.put("usu_stats.meta_semanal_pasos", weeklyFor(nuevoNivel, dif));
             }
             tr.update(ref, up);
@@ -483,17 +510,18 @@ public class FirestoreRepo {
         Object v = s.get(dotted);
         if (!(v instanceof Number)) up.put(dotted, def);
     }
+
     private void ensureMissingDouble(DocumentSnapshot s, Map<String, Object> up,
                                      String dotted, double def) {
         Object v = s.get(dotted);
         if (!(v instanceof Number)) up.put(dotted, def);
     }
 
-    private long stepsFromProg(Map<String,Object> progMap, String pid) {
+    private long stepsFromProg(Map<String, Object> progMap, String pid) {
         if (progMap == null) return 0L;
         Object val = progMap.get(pid);
         if (val instanceof Map) {
-            Object stObj = ((Map<?,?>) val).get("steps");
+            Object stObj = ((Map<?, ?>) val).get("steps");
             if (stObj instanceof Number) {
                 long st = ((Number) stObj).longValue();
                 return Math.max(0L, st);
@@ -586,9 +614,12 @@ public class FirestoreRepo {
     public static final int CHEST_T3 = 3;
 
     @IntDef({CHEST_T1, CHEST_T2, CHEST_T3})
-    public @interface ChestTier {}
+    public @interface ChestTier {
+    }
 
-    /** Compra transaccional garantizando alta en my_cosmetics. */
+    /**
+     * Compra transaccional garantizando alta en my_cosmetics.
+     */
     public void buyCosmetic(@NonNull String uid, @NonNull String cosId, long price,
                             @NonNull OnSuccessListener<Void> ok, @NonNull OnFailureListener err) {
         db.runTransaction((Transaction.Function<Void>) tr -> {
@@ -611,33 +642,19 @@ public class FirestoreRepo {
             tr.update(userDoc(uid), "usu_saldo", saldo - price,
                     "usu_stats.objetos_comprados", FieldValue.increment(1));
 
-            Map<String,Object> cache = new HashMap<>();
+            Map<String, Object> cache = new HashMap<>();
             cache.put("cos_asset", cos.getString("cos_asset"));
             cache.put("cos_assetType", cos.getString("cos_assetType"));
             cache.put("cos_nombre", cos.getString("cos_nombre"));
             cache.put("cos_tipo", cos.getString("cos_tipo"));
 
-            Map<String,Object> sub = new HashMap<>();
+            Map<String, Object> sub = new HashMap<>();
             sub.put("myc_cache", cache);
             sub.put("myc_obtenido", FieldValue.serverTimestamp());
             sub.put("myc_equipped", false);
             tr.set(inventoryDoc(uid, cosId), sub);
             return null;
         }).addOnSuccessListener(ok).addOnFailureListener(err);
-    }
-
-    // ---- Cofres ----
-    public static class ChestResult {
-        public final boolean duplicated;
-        public final String cosmeticId;
-        public final String cosmeticName;
-        public final long refundGranted;
-        ChestResult(boolean duplicated, String cosmeticId, String cosmeticName, long refundGranted) {
-            this.duplicated = duplicated;
-            this.cosmeticId = cosmeticId;
-            this.cosmeticName = cosmeticName;
-            this.refundGranted = refundGranted;
-        }
     }
 
     // ========= CONTADOR DE VERSUS / ROOMS ACTIVOS =========
@@ -676,25 +693,25 @@ public class FirestoreRepo {
                         return;
                     }
 
-                    int[] raceTargets   = {10000, 20000, 30000};
-                    int[] marathonDays  = {3, 4, 5};
+                    int[] raceTargets = {10000, 20000, 30000};
+                    int[] marathonDays = {3, 4, 5};
                     Random r = new Random();
 
                     long targetSteps = isRace ? raceTargets[r.nextInt(raceTargets.length)] : 0;
-                    long days        = isRace ? 0 : marathonDays[r.nextInt(marathonDays.length)];
+                    long days = isRace ? 0 : marathonDays[r.nextInt(marathonDays.length)];
 
-                    Map<String,Object> data = new HashMap<>();
+                    Map<String, Object> data = new HashMap<>();
                     data.put("roo_user", ownerUid);
                     data.put("roo_public", isPublic);
                     data.put("roo_code", isPublic ? "" :
                             (code == null ? "" : code.toUpperCase(Locale.US)));
                     data.put("roo_createdAt", FieldValue.serverTimestamp());
-                    data.put("roo_type", isRace);           // true=carrera, false=maratón
+                    data.put("roo_type", isRace);
                     data.put("roo_targetSteps", targetSteps);
                     data.put("roo_days", days);
 
                     List<String> players = new ArrayList<>();
-                    players.add(ownerUid);                  // el creador también está en la sala
+                    players.add(ownerUid);
                     data.put("roo_players", players);
 
                     data.put("roo_finished", false);
@@ -751,13 +768,11 @@ public class FirestoreRepo {
             String normalizedInput = codeInput == null ? "" :
                     codeInput.trim().toUpperCase(Locale.US);
 
-            // si es privada y hay código, debe coincidir
             if (!isPublic && !normalizedStored.isEmpty()
                     && !normalizedStored.equals(normalizedInput)) {
                 throw new IllegalStateException("Código incorrecto.");
             }
 
-            // jugadores en la sala (normalmente solo el owner)
             List<String> players = new ArrayList<>();
             Object rawPlayers = room.get("roo_players");
             if (rawPlayers instanceof List) {
@@ -778,11 +793,10 @@ public class FirestoreRepo {
                 throw new IllegalStateException("Sala inválida.");
             }
 
-            // construimos los datos del versus
             List<String> vsPlayers = new ArrayList<>(players);
             vsPlayers.add(joinerUid);
 
-            Map<String,Object> vsData = new HashMap<>();
+            Map<String, Object> vsData = new HashMap<>();
             vsData.put("ver_owner", ownerUid);
             vsData.put("ver_players", vsPlayers);
             Boolean typeB = room.getBoolean("roo_type");
@@ -793,9 +807,9 @@ public class FirestoreRepo {
             vsData.put("ver_finished", false);
             String todayCode = todayCode();
 
-            Map<String,Object> progress = new HashMap<>();
+            Map<String, Object> progress = new HashMap<>();
             for (String pUid : vsPlayers) {
-                Map<String,Object> p = new HashMap<>();
+                Map<String, Object> p = new HashMap<>();
                 p.put("steps", 0L);
                 p.put("deviceTotal", 0L);
                 p.put("joinedAt", FieldValue.serverTimestamp());
@@ -808,7 +822,6 @@ public class FirestoreRepo {
             DocumentReference vsRef = versusCol().document();
             tr.set(vsRef, vsData);
 
-            // borramos la sala de espera
             tr.delete(roomRef);
 
             return vsRef.getId();
@@ -824,7 +837,7 @@ public class FirestoreRepo {
                            @NonNull OnFailureListener er) {
 
         final DocumentReference vsRef = versusDoc(versusId);
-        final String todayCode = todayCode(); // yyyyMMdd del día actual
+        final String todayCode = todayCode();
 
         db.runTransaction((Transaction.Function<Void>) transaction -> {
                     DocumentSnapshot snap = transaction.get(vsRef);
@@ -837,21 +850,20 @@ public class FirestoreRepo {
                     // Leer progreso previo de este jugador
                     Object raw = snap.get("ver_progress." + uid);
                     long prevDevice = 0L;
-                    long prevSteps  = 0L;
-                    String prevDay  = null;
+                    long prevSteps = 0L;
+                    String prevDay = null;
 
                     if (raw instanceof Map) {
-                        Map<?,?> m = (Map<?,?>) raw;
+                        Map<?, ?> m = (Map<?, ?>) raw;
                         Object dv = m.get("deviceTotal");
                         Object st = m.get("steps");
                         Object dy = m.get("dayCode");
 
                         if (dv instanceof Number) prevDevice = ((Number) dv).longValue();
-                        if (st instanceof Number) prevSteps  = ((Number) st).longValue();
-                        if (dy instanceof String) prevDay    = (String) dy;
+                        if (st instanceof Number) prevSteps = ((Number) st).longValue();
+                        if (dy instanceof String) prevDay = (String) dy;
                     }
 
-                    // Calcular incremento (reseteo por cambio de día)
                     long inc;
                     if (prevDay == null || !todayCode.equals(prevDay)) {
                         inc = stepsToday;
@@ -864,12 +876,11 @@ public class FirestoreRepo {
                     long now = System.currentTimeMillis();
 
                     Map<String, Object> updates = new HashMap<>();
-                    updates.put("ver_progress." + uid + ".steps",       newSteps);
+                    updates.put("ver_progress." + uid + ".steps", newSteps);
                     updates.put("ver_progress." + uid + ".deviceTotal", stepsToday);
-                    updates.put("ver_progress." + uid + ".lastUpdate",  now);
-                    updates.put("ver_progress." + uid + ".dayCode",     todayCode);
+                    updates.put("ver_progress." + uid + ".lastUpdate", now);
+                    updates.put("ver_progress." + uid + ".dayCode", todayCode);
 
-                    // ¿ya estaba terminado?
                     Boolean finishedFlag = snap.getBoolean("ver_finished");
                     boolean alreadyFinished = finishedFlag != null && finishedFlag;
                     if (alreadyFinished) {
@@ -877,7 +888,6 @@ public class FirestoreRepo {
                         return null;
                     }
 
-                    // Jugadores
                     List<String> players = new ArrayList<>();
                     Object rawPlayers = snap.get("ver_players");
                     if (rawPlayers instanceof List) {
@@ -886,15 +896,13 @@ public class FirestoreRepo {
                         }
                     }
 
-                    // Mapa de progreso de todos
-                    Map<String,Object> progMap = null;
+                    Map<String, Object> progMap = null;
                     Object progObj = snap.get("ver_progress");
                     if (progObj instanceof Map) {
                         //noinspection unchecked
                         progMap = (Map<String, Object>) progObj;
                     }
 
-                    // ---------- LÓGICA ESPECIAL PARA EVENTO COOPERATIVO ----------
                     if (isEvent) {
                         long targetSteps = 0L;
                         Object tObj = snap.get("ver_targetSteps");
@@ -902,7 +910,7 @@ public class FirestoreRepo {
 
                         long totalGroup = 0L;
                         if (progMap != null) {
-                            for (Map.Entry<String,Object> e : progMap.entrySet()) {
+                            for (Map.Entry<String, Object> e : progMap.entrySet()) {
                                 String pid = e.getKey();
                                 long sVal;
                                 if (pid.equals(uid)) {
@@ -927,7 +935,7 @@ public class FirestoreRepo {
 
                             if (!players.isEmpty() && rewardCoins > 0L) {
                                 for (String pid : players) {
-                                    Map<String,Object> upUser = new HashMap<>();
+                                    Map<String, Object> upUser = new HashMap<>();
                                     upUser.put("usu_saldo", FieldValue.increment(rewardCoins));
                                     upUser.put("usu_stats.eventos_participados", FieldValue.increment(1));
                                     transaction.update(userDoc(pid), upUser);
@@ -948,9 +956,7 @@ public class FirestoreRepo {
                         transaction.update(vsRef, updates);
                         return null;
                     }
-                    // ---------- FIN LÓGICA EVENTO, sigue flujo normal 1vs1 ----------
 
-                    // Datos generales del versus
                     boolean isRace = Boolean.TRUE.equals(snap.getBoolean("ver_type"));
 
                     long targetSteps = 0L;
@@ -971,10 +977,9 @@ public class FirestoreRepo {
 
                     boolean closeNow = false;
                     String winnerUid = null;
-                    String loserUid  = null;
+                    String loserUid = null;
 
                     if (isRace) {
-                        // Carrera: termina cuando alguien alcanza la meta
                         if (targetSteps > 0L && newSteps >= targetSteps) {
                             closeNow = true;
                             winnerUid = uid;
@@ -989,7 +994,6 @@ public class FirestoreRepo {
                             }
                         }
                     } else {
-                        // Maratón: termina por tiempo (ver_days)
                         if (days > 0L && createdAtMs > 0L) {
                             long limitMs = createdAtMs + days * 24L * 60L * 60L * 1000L;
                             if (now >= limitMs) {
@@ -1003,7 +1007,6 @@ public class FirestoreRepo {
                                     long s0 = p0.equals(uid) ? newSteps : stepsFromProg(progMap, p0);
                                     long s1 = p1.equals(uid) ? newSteps : stepsFromProg(progMap, p1);
 
-                                    // En empate gana el primero (p0) para no dejar el VS colgado
                                     if (s0 >= s1) {
                                         winnerUid = p0;
                                         loserUid = p1;
@@ -1022,20 +1025,16 @@ public class FirestoreRepo {
                         updates.put("ver_finishedAt", now);
                         updates.put("ver_winner", winnerUid);
 
-                        // ---- Recompensas ----
-                        // Ganador
                         long winnerSteps = winnerUid.equals(uid) ? newSteps : stepsFromProg(progMap, winnerUid);
                         long winnerBase;
                         if (isRace && targetSteps > 0L) {
-                            // Para carrera: se usa la meta o los pasos, lo que corresponda (en práctica: meta)
                             winnerBase = Math.max(winnerSteps, targetSteps);
                         } else {
-                            // Para maratón: se usa lo que caminó
                             winnerBase = winnerSteps;
                         }
                         long winnerCoins = winnerBase * 2L + VS_WIN_COINS_BASE;
 
-                        Map<String,Object> winUp = new HashMap<>();
+                        Map<String, Object> winUp = new HashMap<>();
                         winUp.put("usu_saldo", FieldValue.increment(winnerCoins));
                         winUp.put("usu_stats.carreras_ganadas", FieldValue.increment(1));
                         transaction.update(userDoc(winnerUid), winUp);
@@ -1066,8 +1065,10 @@ public class FirestoreRepo {
                 versusId,
                 uid,
                 stepsToday,
-                v -> { /* OK silencioso */ },
-                e -> { /* ERROR silencioso, si querés loguear algo acá */ }
+                v -> {
+                },
+                e -> {
+                }
         );
     }
 
@@ -1098,7 +1099,7 @@ public class FirestoreRepo {
 
     public static class WeeklyRankingResult {
         public final List<WeeklyRankingRow> rows;
-        public final boolean rewardsApplied; // ya no se usa en UI, siempre false
+        public final boolean rewardsApplied;
         public final long weekKey;
 
         public WeeklyRankingResult(List<WeeklyRankingRow> rows,
@@ -1116,10 +1117,8 @@ public class FirestoreRepo {
 
         long weekKey = currentWeekKey();
 
-        // Limpieza asíncrona de tablas viejas (semanaKey < actual).
         cleanupOldRankingsForUser(uid, weekKey);
 
-        // Buscar tabla de ESTA semana
         rankingsCol()
                 .whereEqualTo("ran_weekKey", weekKey)
                 .whereArrayContains("ran_players", uid)
@@ -1139,7 +1138,6 @@ public class FirestoreRepo {
                 .addOnFailureListener(err);
     }
 
-    /** Limpia tablas donde el usuario participó y son de semanas anteriores. */
     private void cleanupOldRankingsForUser(@NonNull String uid, long currentWeekKey) {
         rankingsCol()
                 .whereArrayContains("ran_players", uid)
@@ -1150,10 +1148,8 @@ public class FirestoreRepo {
                         applyWeeklyRewardsAndDelete(d);
                     }
                 });
-        // Si falla, no rompemos el flujo principal; se reintentará en otro momento.
     }
 
-    /** Aplica recompensas a todos los jugadores de esa tabla y luego borra el doc. */
     private void applyWeeklyRewardsAndDelete(@NonNull DocumentSnapshot rankingDoc) {
         Object rawPlayers = rankingDoc.get("ran_players");
         List<String> players = new ArrayList<>();
@@ -1196,20 +1192,18 @@ public class FirestoreRepo {
                         tmp.add(new WeeklyRankingRow(pid, nombre, km, stepsWeek, 0, 0L));
                     }
 
-                    // Ordenar por km_semana desc
                     Collections.sort(tmp, (a, b) ->
                             Double.compare(b.kmSemana, a.kmSemana));
 
-                    // Asignar posición y coins (1º triple, 2º doble, 3º igual, resto nada)
                     List<WeeklyRankingRow> rows = new ArrayList<>();
                     for (int i = 0; i < tmp.size(); i++) {
                         WeeklyRankingRow base = tmp.get(i);
                         int pos = i + 1;
                         long coins;
-                        if (pos == 1)      coins = base.stepsWeek * 3L;
+                        if (pos == 1) coins = base.stepsWeek * 3L;
                         else if (pos == 2) coins = base.stepsWeek * 2L;
                         else if (pos == 3) coins = base.stepsWeek;
-                        else               coins = 0L;
+                        else coins = 0L;
 
                         rows.add(new WeeklyRankingRow(
                                 base.uid,
@@ -1221,7 +1215,6 @@ public class FirestoreRepo {
                         ));
                     }
 
-                    // Actualizar saldo de todos y borrar ranking en un batch.
                     WriteBatch batch = db.batch();
                     for (WeeklyRankingRow r : rows) {
                         if (r.coins > 0L) {
@@ -1261,7 +1254,6 @@ public class FirestoreRepo {
                     List<DocumentSnapshot> candidates = new ArrayList<>();
                     HashSet<String> usedPlayers = new HashSet<>();
 
-                    // recolectar jugadores ya usados en tablas de esta semana
                     for (DocumentSnapshot d : qs.getDocuments()) {
                         Object raw = d.get("ran_players");
                         if (raw instanceof List) {
@@ -1285,7 +1277,6 @@ public class FirestoreRepo {
                     }
 
                     if (!candidates.isEmpty()) {
-                        // Elige una tabla disponible al azar
                         DocumentSnapshot chosen = candidates.get(new Random().nextInt(candidates.size()));
                         DocumentReference ref = chosen.getReference();
                         ref.update("ran_players", FieldValue.arrayUnion(uid))
@@ -1293,7 +1284,6 @@ public class FirestoreRepo {
                                         ref.get().addOnSuccessListener(ok).addOnFailureListener(err))
                                 .addOnFailureListener(err);
                     } else {
-                        // Crear nueva tabla para esta semana y completarla con jugadores al azar
                         usedPlayers.add(uid);
 
                         db.collection("users").get()
@@ -1334,16 +1324,6 @@ public class FirestoreRepo {
                 .addOnFailureListener(err);
     }
 
-    public void updateChosenStats(@NonNull String uid,
-                                  @Nullable String title1, @Nullable String value1,
-                                  @Nullable String title2, @Nullable String value2) {
-        Map<String, Object> up = new HashMap<>();
-        up.put("usu_chosen1",     title1 == null ? "" : title1);
-        up.put("usu_chosenInfo1", value1 == null ? "" : value1);
-        up.put("usu_chosen2",     title2 == null ? "" : title2);
-        up.put("usu_chosenInfo2", value2 == null ? "" : value2);
-        userDoc(uid).update(up);
-    }
     private void buildWeeklyRows(@NonNull DocumentSnapshot rankingDoc,
                                  long weekKey,
                                  @NonNull OnSuccessListener<WeeklyRankingResult> ok,
@@ -1366,7 +1346,6 @@ public class FirestoreRepo {
             return;
         }
 
-        // Traemos los usuarios de la tabla
         List<Task<DocumentSnapshot>> tasks = new ArrayList<>();
         for (String pid : players) {
             tasks.add(userDoc(pid).get());
@@ -1383,7 +1362,7 @@ public class FirestoreRepo {
                         Object vKm = s.get("usu_stats.km_semana");
                         if (vKm instanceof Number) kmD = ((Number) vKm).doubleValue();
                         double km = kmD == null ? 0.0 : kmD;
-                        long stepsWeek = Math.round(km * 1000.0); // aprox 1000 pasos por km
+                        long stepsWeek = Math.round(km * 1000.0);
 
                         String nombre = s.getString("usu_nombre");
                         if (nombre == null || nombre.trim().isEmpty()) {
@@ -1395,20 +1374,18 @@ public class FirestoreRepo {
                         tmp.add(new WeeklyRankingRow(pid, nombre, km, stepsWeek, 0, 0L));
                     }
 
-                    // Ordenar por km_semana desc
                     Collections.sort(tmp, (a, b) ->
                             Double.compare(b.kmSemana, a.kmSemana));
 
-                    // Asignar posición y coins teóricos (1º triple, 2º doble, 3º igual, resto nada)
                     List<WeeklyRankingRow> rows = new ArrayList<>();
                     for (int i = 0; i < tmp.size(); i++) {
                         WeeklyRankingRow base = tmp.get(i);
                         int pos = i + 1;
                         long coins;
-                        if (pos == 1)      coins = base.stepsWeek * 3L;
+                        if (pos == 1) coins = base.stepsWeek * 3L;
                         else if (pos == 2) coins = base.stepsWeek * 2L;
                         else if (pos == 3) coins = base.stepsWeek;
-                        else               coins = 0L;
+                        else coins = 0L;
 
                         rows.add(new WeeklyRankingRow(
                                 base.uid,

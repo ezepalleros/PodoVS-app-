@@ -60,193 +60,193 @@
                     android:id="@+id/contentLinear"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
                     android:divider="?android:attr/dividerVertical"
-                    android:showDividers="middle"
                     android:dividerPadding="10dp"
+                    android:orientation="vertical"
                     android:paddingTop="6dp"
-                    android:paddingBottom="6dp">
+                    android:paddingBottom="6dp"
+                    android:showDividers="middle">
 
                     <!-- Kilómetros totales -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
                         android:background="#32333A"
-                        android:padding="16dp"
-                        android:clipToOutline="true">
+                        android:clipToOutline="true"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:text="Kilómetros totales"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textStyle="bold"
-                            android:textColor="#FFFFFF"/>
+                            android:text="Kilómetros totales"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvKmTotales"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:paddingTop="6dp"
                             android:text="0.00 km"
-                            android:textSize="20sp"
                             android:textColor="#C7CAD1"
-                            android:paddingTop="6dp"/>
+                            android:textSize="20sp" />
                     </LinearLayout>
 
                     <!-- Carreras ganadas -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
                         android:background="#32333A"
-                        android:padding="16dp"
-                        android:clipToOutline="true">
+                        android:clipToOutline="true"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:text="Carreras ganadas"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textStyle="bold"
-                            android:textColor="#FFFFFF"/>
+                            android:text="Carreras ganadas"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvCarrerasGanadas"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:paddingTop="6dp"
                             android:text="0"
-                            android:textSize="20sp"
                             android:textColor="#C7CAD1"
-                            android:paddingTop="6dp"/>
+                            android:textSize="20sp" />
                     </LinearLayout>
 
                     <!-- Objetos comprados -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
                         android:background="#32333A"
-                        android:padding="16dp"
-                        android:clipToOutline="true">
+                        android:clipToOutline="true"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:text="Objetos comprados"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textStyle="bold"
-                            android:textColor="#FFFFFF"/>
+                            android:text="Objetos comprados"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvObjetosComprados"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:paddingTop="6dp"
                             android:text="0"
-                            android:textSize="20sp"
                             android:textColor="#C7CAD1"
-                            android:paddingTop="6dp"/>
+                            android:textSize="20sp" />
                     </LinearLayout>
 
                     <!-- Eventos participados -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
                         android:background="#32333A"
-                        android:padding="16dp"
-                        android:clipToOutline="true">
+                        android:clipToOutline="true"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:text="Eventos participados"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textStyle="bold"
-                            android:textColor="#FFFFFF"/>
+                            android:text="Eventos participados"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvEventosParticipados"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:paddingTop="6dp"
                             android:text="0"
-                            android:textSize="20sp"
                             android:textColor="#C7CAD1"
-                            android:paddingTop="6dp"/>
+                            android:textSize="20sp" />
                     </LinearLayout>
 
                     <!-- Mejor posición (1 = mejor) -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
                         android:background="#32333A"
-                        android:padding="16dp"
-                        android:clipToOutline="true">
+                        android:clipToOutline="true"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:text="Mejor posición"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textStyle="bold"
-                            android:textColor="#FFFFFF"/>
+                            android:text="Mejor posición"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvMejorPosicionMensual"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:paddingTop="6dp"
                             android:text="-"
-                            android:textSize="20sp"
                             android:textColor="#C7CAD1"
-                            android:paddingTop="6dp"/>
+                            android:textSize="20sp" />
                     </LinearLayout>
 
                     <!-- Metas diarias completadas (total) -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
                         android:background="#32333A"
-                        android:padding="16dp"
-                        android:clipToOutline="true">
+                        android:clipToOutline="true"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:text="Metas diarias completadas (total)"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textStyle="bold"
-                            android:textColor="#FFFFFF"/>
+                            android:text="Metas diarias completadas (total)"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvMetasDiariasOk"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:paddingTop="6dp"
                             android:text="0"
-                            android:textSize="20sp"
                             android:textColor="#C7CAD1"
-                            android:paddingTop="6dp"/>
+                            android:textSize="20sp" />
                     </LinearLayout>
 
                     <!-- Metas semanales completadas (total) -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
                         android:background="#32333A"
-                        android:padding="16dp"
-                        android:clipToOutline="true">
+                        android:clipToOutline="true"
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:text="Metas semanales completadas (total)"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textStyle="bold"
-                            android:textColor="#FFFFFF"/>
+                            android:text="Metas semanales completadas (total)"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvMetasSemanalesOk"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:paddingTop="6dp"
                             android:text="0"
-                            android:textSize="20sp"
                             android:textColor="#C7CAD1"
-                            android:paddingTop="6dp"/>
+                            android:textSize="20sp" />
                     </LinearLayout>
 
                 </LinearLayout>

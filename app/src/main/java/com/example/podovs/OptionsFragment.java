@@ -66,15 +66,15 @@ public class OptionsFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        tvCurrentDif     = view.findViewById(R.id.tvCurrentDif);
-        tvCooldownInfo   = view.findViewById(R.id.tvCooldownInfo);
-        tvResetInfo      = view.findViewById(R.id.tvResetInfo);
-        btnDifBajo       = view.findViewById(R.id.btnDifBajo);
-        btnDifMedio      = view.findViewById(R.id.btnDifMedio);
-        btnDifAlto       = view.findViewById(R.id.btnDifAlto);
+        tvCurrentDif = view.findViewById(R.id.tvCurrentDif);
+        tvCooldownInfo = view.findViewById(R.id.tvCooldownInfo);
+        tvResetInfo = view.findViewById(R.id.tvResetInfo);
+        btnDifBajo = view.findViewById(R.id.btnDifBajo);
+        btnDifMedio = view.findViewById(R.id.btnDifMedio);
+        btnDifAlto = view.findViewById(R.id.btnDifAlto);
         btnResetProgress = view.findViewById(R.id.btnResetProgress);
-        btnLogout        = view.findViewById(R.id.btnLogout);
-        btnClose         = view.findViewById(R.id.btnClose);
+        btnLogout = view.findViewById(R.id.btnLogout);
+        btnClose = view.findViewById(R.id.btnClose);
 
         loadCurrentData();
         updateResetHint();
@@ -137,8 +137,8 @@ public class OptionsFragment extends Fragment {
         btnDifMedio.setAlpha(0.7f);
         btnDifAlto.setAlpha(0.7f);
 
-        if ("bajo".equalsIgnoreCase(dif))      btnDifBajo.setAlpha(1f);
-        else if ("medio".equalsIgnoreCase(dif))btnDifMedio.setAlpha(1f);
+        if ("bajo".equalsIgnoreCase(dif)) btnDifBajo.setAlpha(1f);
+        else if ("medio".equalsIgnoreCase(dif)) btnDifMedio.setAlpha(1f);
         else if ("alto".equalsIgnoreCase(dif)) btnDifAlto.setAlpha(1f);
     }
 
@@ -148,7 +148,7 @@ public class OptionsFragment extends Fragment {
         repo.changeDifficultyWithCooldown(uid, nuevaDifi,
                 v -> {
                     Toast.makeText(getContext(), "Dificultad cambiada a " + nuevaDifi + ".", Toast.LENGTH_SHORT).show();
-                    loadCurrentData(); // refresca texto, estilos y cooldown
+                    loadCurrentData();
                 },
                 e -> Toast.makeText(getContext(), e.getMessage(), Toast.LENGTH_LONG).show()
         );

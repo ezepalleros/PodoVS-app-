@@ -150,8 +150,8 @@
                             android:layout_height="match_parent"
                             android:background="#D0000000"
                             android:clickable="true"
-                            android:focusable="true"
                             android:elevation="12dp"
+                            android:focusable="true"
                             android:gravity="center"
                             android:orientation="vertical"
                             android:visibility="gone">
@@ -298,8 +298,8 @@
                             android:layout_height="match_parent"
                             android:background="#D0000000"
                             android:clickable="true"
-                            android:focusable="true"
                             android:elevation="12dp"
+                            android:focusable="true"
                             android:gravity="center"
                             android:orientation="vertical"
                             android:visibility="gone">

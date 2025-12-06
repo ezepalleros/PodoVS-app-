@@ -104,22 +104,22 @@ public class EventActivity extends AppCompatActivity {
         }
 
         // Bind UI
-        tvEventTitle      = findViewById(R.id.tvEventTitle);
-        tvEventGoal       = findViewById(R.id.tvEventGoal);
-        tvEventReward     = findViewById(R.id.tvEventReward);
-        tvEventCountdown  = findViewById(R.id.tvEventCountdown);
-        ivEventBoss       = findViewById(R.id.ivEventBoss);
+        tvEventTitle = findViewById(R.id.tvEventTitle);
+        tvEventGoal = findViewById(R.id.tvEventGoal);
+        tvEventReward = findViewById(R.id.tvEventReward);
+        tvEventCountdown = findViewById(R.id.tvEventCountdown);
+        ivEventBoss = findViewById(R.id.ivEventBoss);
 
-        containerMyEventRoom      = findViewById(R.id.containerMyEventRoom);
-        containerOtherEventRooms  = findViewById(R.id.containerOtherEventRooms);
-        swEventRoomPublic         = findViewById(R.id.swEventRoomPublic);
-        btnEventCreateRoom        = findViewById(R.id.btnEventCreateRoom);
+        containerMyEventRoom = findViewById(R.id.containerMyEventRoom);
+        containerOtherEventRooms = findViewById(R.id.containerOtherEventRooms);
+        swEventRoomPublic = findViewById(R.id.swEventRoomPublic);
+        btnEventCreateRoom = findViewById(R.id.btnEventCreateRoom);
 
         // Bottom bar
-        ImageButton btnHome         = findViewById(R.id.btnHome);
-        ImageButton btnShop         = findViewById(R.id.btnShop);
-        ImageButton btnVs           = findViewById(R.id.btnVs);
-        ImageButton btnEvents       = findViewById(R.id.btnEvents);
+        ImageButton btnHome = findViewById(R.id.btnHome);
+        ImageButton btnShop = findViewById(R.id.btnShop);
+        ImageButton btnVs = findViewById(R.id.btnVs);
+        ImageButton btnEvents = findViewById(R.id.btnEvents);
         ImageButton btnLeaderboards = findViewById(R.id.btnLeaderboards);
 
         btnHome.setOnClickListener(v -> {
@@ -176,10 +176,10 @@ public class EventActivity extends AppCompatActivity {
 
                     for (DocumentSnapshot d : qs.getDocuments()) {
                         Timestamp tsStart = d.getTimestamp("ev_startAt");
-                        Timestamp tsEnd   = d.getTimestamp("ev_endAt");
+                        Timestamp tsEnd = d.getTimestamp("ev_endAt");
 
                         long startMs = tsStart != null ? tsStart.toDate().getTime() : Long.MIN_VALUE;
-                        long endMs   = tsEnd   != null ? tsEnd.toDate().getTime()   : Long.MAX_VALUE;
+                        long endMs = tsEnd != null ? tsEnd.toDate().getTime() : Long.MAX_VALUE;
 
                         if (now >= startMs && now <= endMs) {
                             active = d;
@@ -394,12 +394,12 @@ public class EventActivity extends AppCompatActivity {
 
         Object progObj = chosen.get("ver_progress");
         if (progObj instanceof Map) {
-            Map<?,?> m = (Map<?,?>) progObj;
+            Map<?, ?> m = (Map<?, ?>) progObj;
             for (String pid : info.players) {
                 long steps = 0L;
                 Object v = m.get(pid);
                 if (v instanceof Map) {
-                    Object st = ((Map<?,?>) v).get("steps");
+                    Object st = ((Map<?, ?>) v).get("steps");
                     if (st instanceof Number) steps = ((Number) st).longValue();
                 }
                 info.stepsByPlayer.put(pid, steps);
@@ -424,7 +424,7 @@ public class EventActivity extends AppCompatActivity {
         if (currentEventId == null) return;
 
         final String eventId = currentEventId;
-        final String roomId  = room.id;
+        final String roomId = room.id;
 
         db.runTransaction(tr -> {
             DocumentSnapshot roomSnap =
@@ -432,7 +432,7 @@ public class EventActivity extends AppCompatActivity {
 
             if (!roomSnap.exists()) return null;
 
-            Boolean finished  = roomSnap.getBoolean("roo_finished");
+            Boolean finished = roomSnap.getBoolean("roo_finished");
             Boolean vsCreated = roomSnap.getBoolean("roo_vsCreated");
 
             // si la sala ya está terminada o ya tiene VS creado, no hacemos nada
@@ -512,7 +512,6 @@ public class EventActivity extends AppCompatActivity {
         containerMyEventRoom.removeAllViews();
         containerOtherEventRooms.removeAllViews();
 
-        // Prioridad: si ya hay versus coop, mostramos eso
         if (myCoopVersus != null) {
             containerMyEventRoom.addView(makeCoopVersusCard(myCoopVersus));
 
@@ -522,7 +521,6 @@ public class EventActivity extends AppCompatActivity {
             return;
         }
 
-        // Si no hay versus, mostramos sala (si existe)
         if (myRoom == null) {
             containerMyEventRoom.addView(makeSimpleText(
                     "Todavía no estás en ninguna sala del evento."
@@ -545,7 +543,7 @@ public class EventActivity extends AppCompatActivity {
     private void updateCreateButtonState() {
         boolean canCreate = currentEventId != null
                 && myRoom == null
-                && myCoopVersus == null; // si ya tenés equipo, no creás sala
+                && myCoopVersus == null;
         btnEventCreateRoom.setEnabled(canCreate);
         btnEventCreateRoom.setAlpha(canCreate ? 1f : 0.5f);
     }
@@ -566,7 +564,6 @@ public class EventActivity extends AppCompatActivity {
 
         boolean isPublic = swEventRoomPublic.isChecked();
 
-        // Para salas privadas generamos un código de 4 dígitos.
         String code;
         if (!isPublic) {
             int num = new Random().nextInt(10_000); // 0..9999
@@ -636,7 +633,7 @@ public class EventActivity extends AppCompatActivity {
                     if (!isPublic) {
                         String stored = snap.getString("roo_code");
                         String normalizedStored = stored == null ? "" : stored.trim();
-                        String normalizedInput  = inputCode == null ? "" : inputCode.trim();
+                        String normalizedInput = inputCode == null ? "" : inputCode.trim();
 
                         if (normalizedStored.isEmpty()) {
                             Toast.makeText(this,
@@ -949,7 +946,6 @@ public class EventActivity extends AppCompatActivity {
         return (int) (v * getResources().getDisplayMetrics().density);
     }
 
-    // yyyyMMdd del día actual (mismo formato que FirestoreRepo)
     private String todayCode() {
         return new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
                 .format(new java.util.Date());

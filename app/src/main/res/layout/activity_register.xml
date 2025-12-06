@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootRegister"
     android:layout_width="match_parent"
@@ -16,10 +15,10 @@
         app:cardBackgroundColor="#2B2B2F"
         app:cardCornerRadius="18dp"
         app:cardElevation="8dp"
-        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -33,43 +32,43 @@
                 android:layout_height="wrap_content"
                 android:text="Crear cuenta"
                 android:textColor="@android:color/white"
-                android:textStyle="bold"
-                android:textSize="20sp"/>
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <EditText
                 android:id="@+id/etNombre"
                 android:layout_width="match_parent"
                 android:layout_height="50dp"
                 android:layout_marginTop="12dp"
-                android:hint="Nombre"
-                android:textColor="@android:color/white"
-                android:textColorHint="#C7CAD1"
                 android:background="@android:color/transparent"
-                android:paddingHorizontal="14dp"/>
+                android:hint="Nombre"
+                android:paddingHorizontal="14dp"
+                android:textColor="@android:color/white"
+                android:textColorHint="#C7CAD1" />
 
             <EditText
                 android:id="@+id/etEmail"
                 android:layout_width="match_parent"
                 android:layout_height="50dp"
                 android:layout_marginTop="8dp"
+                android:background="@android:color/transparent"
                 android:hint="Email"
                 android:inputType="textEmailAddress"
+                android:paddingHorizontal="14dp"
                 android:textColor="@android:color/white"
-                android:textColorHint="#C7CAD1"
-                android:background="@android:color/transparent"
-                android:paddingHorizontal="14dp"/>
+                android:textColorHint="#C7CAD1" />
 
             <EditText
                 android:id="@+id/etPassword"
                 android:layout_width="match_parent"
                 android:layout_height="50dp"
                 android:layout_marginTop="8dp"
+                android:background="@android:color/transparent"
                 android:hint="Contraseña"
                 android:inputType="textPassword"
+                android:paddingHorizontal="14dp"
                 android:textColor="@android:color/white"
-                android:textColorHint="#C7CAD1"
-                android:background="@android:color/transparent"
-                android:paddingHorizontal="14dp"/>
+                android:textColorHint="#C7CAD1" />
 
             <!-- Dificultad -->
             <TextView
@@ -78,45 +77,45 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Dificultad"
-                android:textColor="#C7CAD1"/>
+                android:textColor="#C7CAD1" />
 
             <Spinner
                 android:id="@+id/spDificultad"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"/>
+                android:layout_marginTop="4dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
                 android:layout_marginTop="10dp"
                 android:divider="?android:attr/dividerHorizontal"
+                android:orientation="vertical"
                 android:showDividers="middle">
 
                 <!-- fila resumen actual -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
                     <View
                         android:id="@+id/dotSelected"
                         android:layout_width="12dp"
                         android:layout_height="12dp"
-                        android:background="#6FE6B7"
-                        android:layout_marginEnd="8dp"
                         android:layout_marginTop="2dp"
-                        android:layout_marginBottom="2dp"/>
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="2dp"
+                        android:background="#6FE6B7" />
 
                     <TextView
                         android:id="@+id/tvDifTitulo"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Fácil (verde)"
-                        android:textStyle="bold"
-                        android:textColor="#6FE6B7"/>
+                        android:textColor="#6FE6B7"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <!-- explicación dinámica -->
@@ -125,9 +124,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:textColor="#C7CAD1"
+                    android:lineSpacingExtra="2dp"
                     android:text="-"
-                    android:lineSpacingExtra="2dp"/>
+                    android:textColor="#C7CAD1" />
             </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
@@ -137,9 +136,9 @@
                 android:layout_marginTop="14dp"
                 android:text="Crear cuenta"
                 android:textAllCaps="false"
-                app:cornerRadius="12dp"
+                android:textColor="#1E1F22"
                 app:backgroundTint="@android:color/white"
-                android:textColor="#1E1F22"/>
+                app:cornerRadius="12dp" />
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 

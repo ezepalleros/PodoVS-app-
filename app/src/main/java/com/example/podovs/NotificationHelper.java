@@ -28,31 +28,23 @@ public final class NotificationHelper {
     private static final String KEY_LIST = "list";
     private static final int MAX_STORED = 50;
 
-    private NotificationHelper() {}
+    private NotificationHelper() {
+    }
 
     // ================== API pública ==================
 
     public static void showGoalClaimAvailable(Context context, String goalType) {
         String title = "¡Reclamo disponible!";
-        String body  = "Tenés la meta " + goalType + " lista para reclamar.";
+        String body = "Tenés la meta " + goalType + " lista para reclamar.";
         pushAndLog(context, title, body, android.R.drawable.ic_dialog_info);
     }
 
-    /** (Si aún la usas) Notifica meta reclamada. */
-    public static void showGoalCompleted(Context context, String goalType) {
-        String title = "Meta completada 🎉";
-        String body  = "Completaste tu meta " + goalType + ". ¡Bien hecho!";
-        pushAndLog(context, title, body, android.R.drawable.ic_dialog_info);
-    }
-
-    /** Notifica subida de nivel. */
     public static void showLevelUp(Context context, int newLevel) {
         String title = "¡Subiste de nivel! ⭐";
-        String body  = "Ahora sos nivel " + newLevel + ". ¡Seguí así!";
+        String body = "Ahora sos nivel " + newLevel + ". ¡Seguí así!";
         pushAndLog(context, title, body, android.R.drawable.star_big_on);
     }
 
-    /** Devuelve las últimas N notificaciones guardadas (orden: más reciente primero). */
     public static List<Item> getLast(Context context, int n) {
         ArrayList<Item> out = new ArrayList<>();
         try {
@@ -67,7 +59,8 @@ public final class NotificationHelper {
                         o.optString("text", "")
                 ));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return out;
     }
 
@@ -131,7 +124,8 @@ public final class NotificationHelper {
             }
 
             sp.edit().putString(KEY_LIST, arr.toString()).apply();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     public static class Item {

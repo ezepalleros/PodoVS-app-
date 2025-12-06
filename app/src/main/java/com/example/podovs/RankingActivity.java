@@ -67,9 +67,9 @@ public class RankingActivity extends AppCompatActivity {
     private void setupBottomNav() {
         ImageButton btnHome = findViewById(R.id.btnHome);
         ImageButton btnShop = findViewById(R.id.btnShop);
-        ImageButton btnVs   = findViewById(R.id.btnVs);
-        ImageButton btnEvt  = findViewById(R.id.btnEvents);
-        ImageButton btnLb   = findViewById(R.id.btnLeaderboards);
+        ImageButton btnVs = findViewById(R.id.btnVs);
+        ImageButton btnEvt = findViewById(R.id.btnEvents);
+        ImageButton btnLb = findViewById(R.id.btnLeaderboards);
 
         btnHome.setOnClickListener(v -> {
             startActivity(new Intent(this, MainActivity.class));
@@ -132,7 +132,7 @@ public class RankingActivity extends AppCompatActivity {
                 });
     }
 
-     private void startWeeklyCountdown() {
+    private void startWeeklyCountdown() {
         stopWeeklyCountdown();
 
         long now = System.currentTimeMillis();

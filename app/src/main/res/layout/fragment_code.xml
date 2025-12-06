@@ -8,20 +8,20 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
         android:text="Esta sala es privada. Ingresá el código de 4 letras para unirte."
-        android:textSize="14sp"
         android:textColor="#4B5563"
-        android:paddingBottom="8dp"/>
+        android:textSize="14sp" />
 
     <EditText
         android:id="@+id/etRoomCode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@android:drawable/edit_text"
         android:hint="Ej: ABXD"
-        android:maxLength="4"
-        android:inputType="textCapCharacters"
         android:importantForAutofill="no"
-        android:singleLine="true"
+        android:inputType="textCapCharacters"
+        android:maxLength="4"
         android:padding="8dp"
-        android:background="@android:drawable/edit_text" />
+        android:singleLine="true" />
 </LinearLayout>
